@@ -9,7 +9,7 @@ router.get('/status', (req: Request, res: Response) => {
   res.json({
     status: 'online',
     product: 'ResumeSync (Resume Intelligence Copilot)',
-    checkpoint: '01 - Foundation',
+    checkpoint: '02 - Development Environment & Server Orchestration',
     timestamp: new Date().toISOString()
   });
 });
