@@ -7,6 +7,7 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
+# Node modules and build outputs
 node_modules
 dist
 dist-server
@@ -24,10 +25,12 @@ dist-ssr
 *.sln
 *.sw?
 
-# Environment variables
+# Environment variables & secrets (Strict Security Matrix)
 .env
-.env*.local
+.env.*
+!.env.example
 
-# Temporary files
+# Temporary files & caches
 scratch/
 tmp/
+.cache
