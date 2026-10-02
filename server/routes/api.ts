@@ -9,14 +9,13 @@ router.get('/status', (req: Request, res: Response) => {
   res.json({
     status: 'online',
     product: 'ResumeSync (Resume Intelligence Copilot)',
-    checkpoint: '03 - Environment Variables & Security Matrix',
+    checkpoint: '04 - Design System & Modern UI Foundation',
     timestamp: new Date().toISOString()
   });
 });
 
 /**
  * Safe Configuration Status & Security Matrix Diagnostic Route
- * Note: Never exposes raw secret strings; only reports boolean configuration and safety status.
  */
 router.get('/config-status', (req: Request, res: Response) => {
   const isPortConfigured = Boolean(process.env.PORT);
@@ -28,7 +27,7 @@ router.get('/config-status', (req: Request, res: Response) => {
   const isGoogleOAuthConfigured = Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET);
 
   res.json({
-    checkpoint: '03 - Environment Variables & Security Matrix',
+    checkpoint: '04 - Design System & Modern UI Foundation',
     status: 'verified',
     timestamp: new Date().toISOString(),
     matrix: {
@@ -49,6 +48,13 @@ router.get('/config-status', (req: Request, res: Response) => {
         gitIgnoreProtection: 'Active (.env and secrets omitted from VCS)',
         gracefulFallbackEnabled: true,
         zeroSecretsExposed: true
+      },
+      designSystem: {
+        theme: 'Dark Slate & Brand Blue',
+        typography: ['Inter (UI)', 'Merriweather (Resume Canvas)', 'JetBrains Mono (Code/LaTeX)'],
+        responsiveShell: 'Active',
+        glassmorphicHeaders: 'Active',
+        customScrollbars: 'Configured'
       }
     }
   });

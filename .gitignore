@@ -34,3 +34,4 @@ dist-ssr
 scratch/
 tmp/
 .cache
+.VSCodeCounter/
