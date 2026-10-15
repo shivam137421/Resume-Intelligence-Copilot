@@ -229,3 +229,14 @@ export interface ChatMessage {
   }[];
   diffPatch?: AIDiffPatch[];
 }
+
+export type WorkspaceTab =
+  | 'dashboard'
+  | 'editor'
+  | 'latex'
+  | 'preview'
+  | 'jd-intelligence'
+  | 'diff'
+  | 'health-check'
+  | 'content-library';
+

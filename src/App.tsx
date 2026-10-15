@@ -1,723 +1,1241 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Sparkles,
-  Palette,
-  Type,
-  Layout,
-  Component as ComponentIcon,
+  LayoutDashboard,
+  FileText,
+  Code2,
+  Eye,
+  Target,
+  GitCompare,
+  Stethoscope,
+  Bookmark,
   CheckCircle2,
   AlertCircle,
   Copy,
   Check,
   RefreshCw,
-  Monitor,
-  Tablet,
-  Smartphone,
-  Eye,
-  Sliders,
-  Layers,
   ArrowRight,
   ShieldCheck,
-  Code2,
   Zap,
   Star,
   Download,
   Search,
-  FileText
+  ExternalLink,
+  Layers,
+  Save,
+  Plus,
+  Trash2,
+  Edit3,
+  Sliders,
+  Maximize2,
+  Minimize2,
+  Info
 } from 'lucide-react';
-
-interface DiagnosticResponse {
-  checkpoint: string;
-  status: string;
-  timestamp: string;
-  matrix: {
-    server: {
-      port: number | string;
-      nodeEnv: string;
-      serverSecretsIsolated: boolean;
-    };
-    designSystem?: {
-      theme: string;
-      typography: string[];
-      responsiveShell: string;
-      glassmorphicHeaders: string;
-      customScrollbars: string;
-    };
-  };
-}
+import { Navbar } from './components/layout/Navbar';
+import { WorkspaceTab, ResumeData, ResumeVersion } from './types/resume';
+import {
+  createInitialResume,
+  createInitialVersions,
+  generateLatexFromResume
+} from './utils/defaultResume';
 
 export function App() {
-  const [activeTab, setActiveTab] = useState<'palette' | 'typography' | 'components' | 'responsive' | 'diagnostics'>('palette');
-  const [copiedHex, setCopiedHex] = useState<string | null>(null);
-  const [viewportMode, setViewportMode] = useState<'desktop' | 'tablet' | 'mobile'>('desktop');
-  const [diagnosticData, setDiagnosticData] = useState<DiagnosticResponse | null>(null);
-  const [loading, setLoading] = useState<boolean>(false);
-  const [error, setError] = useState<string | null>(null);
-  const [sampleInputValue, setSampleInputValue] = useState<string>('Senior Fullstack Engineer');
-  const [sampleToggle, setSampleToggle] = useState<boolean>(true);
-  const [accentColor, setAccentColor] = useState<string>('#0c8ee9');
+  // Navigation & Workspace State
+  const [activeTab, setActiveTab] = useState<WorkspaceTab>('dashboard');
+  const [resume, setResume] = useState<ResumeData>(() => createInitialResume());
+  const [versions, setVersions] = useState<ResumeVersion[]>(() =>
+    createInitialVersions(createInitialResume())
+  );
+  const [isSaving, setIsSaving] = useState<boolean>(false);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [copiedLatex, setCopiedLatex] = useState<boolean>(false);
+  const [previewZoom, setPreviewZoom] = useState<number>(100);
 
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text);
-    setCopiedHex(text);
-    setTimeout(() => setCopiedHex(null), 2000);
+  // AI Diff state for Checkpoint 05 interaction demonstration
+  const [pendingDiffs, setPendingDiffs] = useState([
+    {
+      id: 'diff-1',
+      section: 'Professional Summary',
+      type: 'enhancement',
+      title: 'Strengthen AI Copilot Impact Metrics',
+      original:
+        'Driven Full Stack Engineer with 4+ years of experience architecting high-concurrency Node.js and React applications...',
+      suggestion:
+        'Impact-focused Full Stack & AI Systems Engineer with 4+ years driving 45% latency reductions across cloud-native Node.js, React 19, and Gemini LLM copilot microservices serving 500k+ MAU.',
+      applied: false
+    },
+    {
+      id: 'diff-2',
+      section: 'Technical Skills',
+      type: 'addition',
+      title: 'Add High-Demand JD Keywords: Kubernetes & Next.js 15',
+      original: 'Databases & Cloud: PostgreSQL, Supabase, MongoDB, Redis, Docker, AWS',
+      suggestion:
+        'Databases & Cloud: PostgreSQL, Supabase, MongoDB, Redis, Docker, Kubernetes, AWS, Next.js 15',
+      applied: false
+    },
+    {
+      id: 'diff-3',
+      section: 'Work Experience',
+      type: 'metric',
+      title: 'Quantify Vanguard Team Leadership',
+      original:
+        'Led a team of 4 engineers in migrating frontend applications to Next.js and React 19...',
+      suggestion:
+        'Spearheaded an agile team of 4 engineers in migrating frontend architecture to React 19, elevating Lighthouse core web vitals from 62 to 98 and cutting bundle size by 34%.',
+      applied: false
+    }
+  ]);
+
+  const saveTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  const showToast = (message: string) => {
+    setToastMessage(message);
+    setTimeout(() => {
+      setToastMessage(null);
+    }, 3000);
   };
 
-  const fetchDiagnostics = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await fetch('/api/config-status');
-      if (!res.ok) {
-        throw new Error(`Server returned status ${res.status}`);
-      }
-      const data: DiagnosticResponse = await res.json();
-      setDiagnosticData(data);
-    } catch (err: any) {
-      setError(err.message || 'Failed to fetch diagnostic state from server');
-    } finally {
-      setLoading(false);
+  // Helper to trigger autosave feedback
+  const triggerAutosaveFeedback = () => {
+    setIsSaving(true);
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => {
+      setIsSaving(false);
+      setResume((prev) => ({
+        ...prev,
+        updatedAt: new Date().toISOString()
+      }));
+    }, 500);
+  };
+
+  // Update top-level resume field
+  const updateResumeField = (field: keyof ResumeData, value: any) => {
+    setResume((prev) => ({
+      ...prev,
+      [field]: value,
+      updatedAt: new Date().toISOString()
+    }));
+    triggerAutosaveFeedback();
+  };
+
+  // Update nested header field
+  const updateHeaderField = (field: string, value: any) => {
+    setResume((prev) => ({
+      ...prev,
+      header: {
+        ...prev.header,
+        [field]: value
+      },
+      updatedAt: new Date().toISOString()
+    }));
+    triggerAutosaveFeedback();
+  };
+
+  // Create and snapshot a new resume version
+  const handleCreateVersion = (versionName: string) => {
+    const newVersion: ResumeVersion = {
+      id: `ver-${Date.now()}`,
+      resumeId: resume.id,
+      versionName: versionName.trim(),
+      resumeData: JSON.parse(JSON.stringify(resume)),
+      score: 92,
+      createdAt: new Date().toISOString()
+    };
+    setVersions((prev) => [newVersion, ...prev]);
+    showToast(`Created version: "${versionName}"`);
+  };
+
+  // Restore an existing version into the active resume state
+  const handleRestoreVersion = (versionId: string) => {
+    const target = versions.find((v) => v.id === versionId);
+    if (target) {
+      setResume(JSON.parse(JSON.stringify(target.resumeData)));
+      triggerAutosaveFeedback();
+      showToast(`Switched active resume to: "${target.versionName}"`);
     }
   };
 
-  useEffect(() => {
-    fetchDiagnostics();
-  }, []);
+  // Copy LaTeX source to clipboard
+  const handleCopyLatex = () => {
+    const latex = generateLatexFromResume(resume);
+    navigator.clipboard.writeText(latex);
+    setCopiedLatex(true);
+    showToast('LaTeX source code copied to clipboard!');
+    setTimeout(() => setCopiedLatex(false), 2000);
+  };
 
-  const brandSwatches = [
-    { label: 'brand-50', hex: '#f0f7ff', textDark: true },
-    { label: 'brand-100', hex: '#e0effe', textDark: true },
-    { label: 'brand-200', hex: '#bae0fd', textDark: true },
-    { label: 'brand-300', hex: '#7cc8fc', textDark: true },
-    { label: 'brand-400', hex: '#36abfa', textDark: false },
-    { label: 'brand-500', hex: '#0c8ee9', textDark: false, primary: true },
-    { label: 'brand-600', hex: '#0270c7', textDark: false },
-    { label: 'brand-700', hex: '#0359a1', textDark: false },
-    { label: 'brand-800', hex: '#074c85', textDark: false },
-    { label: 'brand-900', hex: '#0c406e', textDark: false },
-    { label: 'brand-950', hex: '#082849', textDark: false },
-  ];
+  // Apply AI diff patch to active resume
+  const handleApplyDiff = (diffId: string) => {
+    const target = pendingDiffs.find((d) => d.id === diffId);
+    if (!target || target.applied) return;
 
-  const darkSlateSwatches = [
-    { label: 'dark.bg', hex: '#0b1120', desc: 'App backdrop' },
-    { label: 'dark.surface', hex: '#0f172a', desc: 'Panel surface' },
-    { label: 'dark.card', hex: '#1e293b', desc: 'Component card' },
-    { label: 'dark.card-hover', hex: '#243248', desc: 'Hover state' },
-    { label: 'dark.border', hex: '#334155', desc: 'Subtle boundary' },
-    { label: 'dark.muted', hex: '#64748b', desc: 'Secondary text' },
-  ];
+    if (diffId === 'diff-1') {
+      updateResumeField('summary', target.suggestion);
+    } else if (diffId === 'diff-2') {
+      setResume((prev) => {
+        const skills = [...prev.skills];
+        const cloudCat = skills.find((s) => s.category.includes('Databases'));
+        if (cloudCat && !cloudCat.skills.includes('Kubernetes')) {
+          cloudCat.skills.push('Kubernetes', 'Next.js 15');
+        }
+        return { ...prev, skills };
+      });
+      triggerAutosaveFeedback();
+    } else if (diffId === 'diff-3') {
+      setResume((prev) => {
+        const exp = [...prev.experience];
+        if (exp[0] && exp[0].bullets[2]) {
+          exp[0].bullets[2] = target.suggestion;
+        }
+        return { ...prev, experience: exp };
+      });
+      triggerAutosaveFeedback();
+    }
 
-  const semanticSwatches = [
-    { label: 'accent.emerald', hex: '#10b981', name: 'ATS Pass / Success' },
-    { label: 'accent.amber', hex: '#f59e0b', name: 'Warning / In Progress' },
-    { label: 'accent.rose', hex: '#f43f5e', name: 'Skill Gap / Destructive' },
-    { label: 'accent.indigo', hex: '#6366f1', name: 'AI Copilot / Prompt' },
-    { label: 'accent.violet', hex: '#8b5cf6', name: 'LaTeX Generator' },
-    { label: 'accent.cyan', hex: '#06b6d4', name: 'JD Intelligence' },
-  ];
+    setPendingDiffs((prev) =>
+      prev.map((d) => (d.id === diffId ? { ...d, applied: true } : d))
+    );
+    showToast(`Applied improvement: "${target.title}"`);
+  };
+
+  const unappliedDiffsCount = pendingDiffs.filter((d) => !d.applied).length;
 
   return (
     <div className="min-h-screen w-full flex flex-col bg-slate-950 text-slate-100 font-sans selection:bg-brand-500/30 selection:text-brand-200">
-      {/* Glassmorphic Header Shell */}
-      <header className="bg-slate-950/80 backdrop-blur-md border-b border-slate-800/80 text-white h-16 flex items-center justify-between px-4 sm:px-8 sticky top-0 z-50">
-        <div className="flex items-center space-x-3">
-          <div className="p-2 bg-gradient-to-tr from-brand-600 to-indigo-600 rounded-xl shadow-lg shadow-brand-500/25">
-            <Sparkles className="w-5 h-5 text-white" />
-          </div>
-          <div>
-            <div className="flex items-center space-x-2">
-              <span className="font-bold text-lg tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-white via-slate-100 to-slate-400">
-                ResumeSync
-              </span>
-              <span className="hidden sm:inline-block text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-brand-500/10 text-brand-400 border border-brand-500/20">
-                Checkpoint 04
-              </span>
-            </div>
-            <p className="text-[10px] text-slate-400 hidden sm:block font-medium">Design System & Modern UI Foundation</p>
-          </div>
+      
+      {/* Toast Notification Alert */}
+      {toastMessage && (
+        <div className="fixed bottom-12 right-6 z-50 flex items-center space-x-2 px-4 py-2.5 rounded-xl bg-brand-600 text-white shadow-xl shadow-brand-500/20 border border-brand-400/40 text-xs font-medium animate-in fade-in slide-in-from-bottom-3 duration-200">
+          <CheckCircle2 className="w-4 h-4 text-emerald-300" />
+          <span>{toastMessage}</span>
         </div>
+      )}
 
-        {/* Global Controls & Status Badges */}
-        <div className="flex items-center space-x-2 sm:space-x-3">
-          <div className="hidden md:flex items-center space-x-2 px-3 py-1.5 rounded-xl bg-slate-900/80 border border-slate-800 text-xs text-slate-300">
-            <Palette className="w-3.5 h-3.5 text-brand-400" />
-            <span className="font-mono text-[11px]">Tailwind v3.4 + Inter</span>
-          </div>
+      {/* Persistent Application Header & Navigation Bar */}
+      <Navbar
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        resume={resume}
+        versions={versions}
+        onCreateVersion={handleCreateVersion}
+        onRestoreVersion={handleRestoreVersion}
+        isSaving={isSaving}
+        scoreBadge="87%"
+        diffBadge={unappliedDiffsCount || undefined}
+        healthBadge={2}
+        onSimulateAutosave={triggerAutosaveFeedback}
+      />
 
-          <div className="flex items-center space-x-2 px-3 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-xs text-emerald-400">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-            <span className="font-medium">Design Tokens Active</span>
-          </div>
-        </div>
-      </header>
-
-      {/* Main Container */}
-      <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8 flex flex-col space-y-6">
-        {/* Hero Section */}
-        <div className="p-6 sm:p-8 rounded-3xl bg-gradient-to-b from-slate-900/90 to-slate-900/40 border border-slate-800/80 shadow-2xl relative overflow-hidden">
-          {/* Subtle Ambient Background Glows */}
-          <div className="absolute top-0 right-1/4 w-96 h-96 bg-brand-500/10 rounded-full blur-3xl pointer-events-none -z-0" />
-          <div className="absolute bottom-0 right-10 w-64 h-64 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none -z-0" />
-
-          <div className="relative z-10 max-w-3xl space-y-3">
-            <div className="inline-flex items-center space-x-2 px-3.5 py-1.5 rounded-full bg-brand-500/10 border border-brand-500/20 text-brand-400 text-xs font-medium">
-              <Zap className="w-3.5 h-3.5" />
-              <span>Modern SaaS Aesthetic Architecture</span>
-            </div>
-            <h1 className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight leading-tight">
-              Design System & UI Foundation
-            </h1>
-            <p className="text-slate-400 text-sm sm:text-base leading-relaxed">
-              Engineered with Tailwind CSS custom brand tokens, dark slate aesthetics, glassmorphic headers, responsive layout containers, and triple typography scales (<span className="text-brand-300 font-medium">Inter</span> for SaaS UI, <span className="text-brand-300 font-medium">Merriweather</span> for resume documents, and <span className="text-brand-300 font-medium">JetBrains Mono</span> for LaTeX & code).
-            </p>
-          </div>
-
-          {/* Navigation Tabs */}
-          <div className="relative z-10 flex flex-wrap gap-2 pt-6 mt-6 border-t border-slate-800/80">
-            <button
-              onClick={() => setActiveTab('palette')}
-              className={`inline-flex items-center space-x-2 px-4 py-2 rounded-xl text-xs font-medium transition cursor-pointer ${
-                activeTab === 'palette'
-                  ? 'bg-brand-600 text-white shadow-lg shadow-brand-500/20'
-                  : 'bg-slate-900/80 text-slate-400 hover:text-white hover:bg-slate-800 border border-slate-800'
-              }`}
-            >
-              <Palette className="w-4 h-4" />
-              <span>Color Palette Matrix</span>
-            </button>
-            <button
-              onClick={() => setActiveTab('typography')}
-              className={`inline-flex items-center space-x-2 px-4 py-2 rounded-xl text-xs font-medium transition cursor-pointer ${
-                activeTab === 'typography'
-                  ? 'bg-brand-600 text-white shadow-lg shadow-brand-500/20'
-                  : 'bg-slate-900/80 text-slate-400 hover:text-white hover:bg-slate-800 border border-slate-800'
-              }`}
-            >
-              <Type className="w-4 h-4" />
-              <span>Typography Scales</span>
-            </button>
-            <button
-              onClick={() => setActiveTab('components')}
-              className={`inline-flex items-center space-x-2 px-4 py-2 rounded-xl text-xs font-medium transition cursor-pointer ${
-                activeTab === 'components'
-                  ? 'bg-brand-600 text-white shadow-lg shadow-brand-500/20'
-                  : 'bg-slate-900/80 text-slate-400 hover:text-white hover:bg-slate-800 border border-slate-800'
-              }`}
-            >
-              <ComponentIcon className="w-4 h-4" />
-              <span>UI Component Primitives</span>
-            </button>
-            <button
-              onClick={() => setActiveTab('responsive')}
-              className={`inline-flex items-center space-x-2 px-4 py-2 rounded-xl text-xs font-medium transition cursor-pointer ${
-                activeTab === 'responsive'
-                  ? 'bg-brand-600 text-white shadow-lg shadow-brand-500/20'
-                  : 'bg-slate-900/80 text-slate-400 hover:text-white hover:bg-slate-800 border border-slate-800'
-              }`}
-            >
-              <Layout className="w-4 h-4" />
-              <span>Responsive Shell Simulator</span>
-            </button>
-            <button
-              onClick={() => setActiveTab('diagnostics')}
-              className={`inline-flex items-center space-x-2 px-4 py-2 rounded-xl text-xs font-medium transition cursor-pointer ${
-                activeTab === 'diagnostics'
-                  ? 'bg-brand-600 text-white shadow-lg shadow-brand-500/20'
-                  : 'bg-slate-900/80 text-slate-400 hover:text-white hover:bg-slate-800 border border-slate-800'
-              }`}
-            >
-              <ShieldCheck className="w-4 h-4" />
-              <span>Diagnostic Audit</span>
-            </button>
-          </div>
-        </div>
-
-        {/* Tab 1: Color Palette Matrix */}
-        {activeTab === 'palette' && (
-          <div className="space-y-6">
-            {/* Brand Colors */}
-            <div className="p-6 rounded-2xl bg-slate-900/60 border border-slate-800 space-y-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="text-base font-semibold text-white flex items-center space-x-2">
-                    <Palette className="w-4 h-4 text-brand-400" />
-                    <span>Brand Color Palette (brand-50 to brand-950)</span>
-                  </h3>
-                  <p className="text-xs text-slate-400 mt-0.5">Primary brand colors tailored for focus states, call-to-actions, and active navigation.</p>
-                </div>
-                {copiedHex && (
-                  <span className="text-xs font-medium text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1 rounded-lg flex items-center space-x-1">
-                    <Check className="w-3.5 h-3.5" />
-                    <span>Copied {copiedHex}</span>
+      {/* Main Workspace Dynamic View Router (Zero Refresh) */}
+      <main className="flex-1 flex flex-col overflow-hidden max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        
+        {/* ========================================================= */}
+        {/* TAB 1: DASHBOARD VIEW                                     */}
+        {/* ========================================================= */}
+        {activeTab === 'dashboard' && (
+          <div className="space-y-6 animate-in fade-in duration-150">
+            {/* Hero / Header greeting */}
+            <div className="flex flex-col md:flex-row md:items-center justify-between pb-4 border-b border-slate-800 gap-4">
+              <div>
+                <div className="flex items-center space-x-2">
+                  <h1 className="text-2xl font-bold tracking-tight text-white">
+                    Resume Intelligence Hub
+                  </h1>
+                  <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                    Checkpoint 05 Active
                   </span>
-                )}
+                </div>
+                <p className="text-xs text-slate-400 mt-1">
+                  Active Document:{' '}
+                  <span className="text-slate-200 font-semibold">{resume.title}</span> — Candidate:{' '}
+                  <span className="text-brand-400 font-semibold">{resume.header.fullName}</span>
+                </p>
               </div>
 
-              <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-11 gap-2.5">
-                {brandSwatches.map((swatch) => (
+              {/* Quick Action Buttons */}
+              <div className="flex items-center space-x-2">
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('editor')}
+                  className="flex items-center space-x-1.5 px-3.5 py-2 bg-brand-600 hover:bg-brand-500 text-white text-xs font-semibold rounded-lg shadow-md shadow-brand-500/20 transition-all"
+                >
+                  <Edit3 className="w-3.5 h-3.5" />
+                  <span>Open Visual Editor</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('preview')}
+                  className="flex items-center space-x-1.5 px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold rounded-lg border border-slate-700 transition-all"
+                >
+                  <Eye className="w-3.5 h-3.5 text-brand-400" />
+                  <span>Live Preview</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Quick Metrics KPI Grid */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div
+                onClick={() => setActiveTab('jd-intelligence')}
+                className="p-4 rounded-xl bg-slate-900 border border-slate-800 hover:border-brand-500/40 cursor-pointer transition-all hover:bg-slate-850 group"
+              >
+                <div className="flex items-center justify-between text-slate-400 mb-2">
+                  <span className="text-xs font-medium">ATS Match Score</span>
+                  <Target className="w-4 h-4 text-emerald-400 group-hover:scale-110 transition-transform" />
+                </div>
+                <div className="text-2xl font-bold text-emerald-400">87%</div>
+                <div className="text-[11px] text-slate-400 mt-1 flex items-center gap-1">
+                  <span>Google Senior Staff Target</span>
+                  <ArrowRight className="w-3 h-3 text-slate-500 group-hover:translate-x-1 transition-transform" />
+                </div>
+              </div>
+
+              <div
+                onClick={() => setActiveTab('health-check')}
+                className="p-4 rounded-xl bg-slate-900 border border-slate-800 hover:border-brand-500/40 cursor-pointer transition-all hover:bg-slate-850 group"
+              >
+                <div className="flex items-center justify-between text-slate-400 mb-2">
+                  <span className="text-xs font-medium">Resume Health</span>
+                  <Stethoscope className="w-4 h-4 text-cyan-400 group-hover:scale-110 transition-transform" />
+                </div>
+                <div className="text-2xl font-bold text-cyan-400">96 / 100</div>
+                <div className="text-[11px] text-slate-400 mt-1 flex items-center gap-1">
+                  <span>2 non-blocking warnings</span>
+                  <ArrowRight className="w-3 h-3 text-slate-500 group-hover:translate-x-1 transition-transform" />
+                </div>
+              </div>
+
+              <div
+                onClick={() => setActiveTab('diff')}
+                className="p-4 rounded-xl bg-slate-900 border border-slate-800 hover:border-brand-500/40 cursor-pointer transition-all hover:bg-slate-850 group"
+              >
+                <div className="flex items-center justify-between text-slate-400 mb-2">
+                  <span className="text-xs font-medium">AI Copilot Diff</span>
+                  <GitCompare className="w-4 h-4 text-amber-400 group-hover:scale-110 transition-transform" />
+                </div>
+                <div className="text-2xl font-bold text-amber-400">
+                  {unappliedDiffsCount} Pending
+                </div>
+                <div className="text-[11px] text-slate-400 mt-1 flex items-center gap-1">
+                  <span>Suggested metric improvements</span>
+                  <ArrowRight className="w-3 h-3 text-slate-500 group-hover:translate-x-1 transition-transform" />
+                </div>
+              </div>
+
+              <div className="p-4 rounded-xl bg-slate-900 border border-slate-800">
+                <div className="flex items-center justify-between text-slate-400 mb-2">
+                  <span className="text-xs font-medium">Saved Versions</span>
+                  <Layers className="w-3 h-3 text-brand-400" />
+                </div>
+                <div className="text-2xl font-bold text-white">{versions.length}</div>
+                <div className="text-[11px] text-slate-400 mt-1">
+                  Active: <span className="text-brand-300 truncate">{resume.title}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Interactive Live State Verification Card */}
+            <div className="p-5 rounded-2xl bg-gradient-to-br from-slate-900 to-slate-850 border border-slate-800 shadow-lg">
+              <div className="flex items-center justify-between pb-3 mb-4 border-b border-slate-800">
+                <div className="flex items-center space-x-2">
+                  <Sparkles className="w-4 h-4 text-brand-400" />
+                  <h2 className="text-sm font-semibold text-white">
+                    Live Active State Test Bench (Checkpoint 05 Persistence)
+                  </h2>
+                </div>
+                <span className="text-xs font-mono px-2.5 py-0.5 rounded bg-brand-500/10 text-brand-300 border border-brand-500/30">
+                  Instant State Sync Across All Tabs
+                </span>
+              </div>
+
+              <p className="text-xs text-slate-300 mb-4 leading-relaxed">
+                Test state persistence by modifying the candidate fields below. Then switch between the{' '}
+                <strong className="text-white">Visual Editor</strong>,{' '}
+                <strong className="text-white">LaTeX Code</strong>, and{' '}
+                <strong className="text-white">Live Preview</strong> tabs. Notice how your edits persist
+                instantly without page reload or state loss!
+              </p>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-[11px] font-medium text-slate-400 mb-1">
+                    Candidate Full Name:
+                  </label>
+                  <input
+                    type="text"
+                    value={resume.header.fullName}
+                    onChange={(e) => updateHeaderField('fullName', e.target.value)}
+                    className="w-full px-3 py-1.5 text-xs bg-slate-950 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 font-medium"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-medium text-slate-400 mb-1">
+                    Headline / Title:
+                  </label>
+                  <input
+                    type="text"
+                    value={resume.header.headline || ''}
+                    onChange={(e) => updateHeaderField('headline', e.target.value)}
+                    className="w-full px-3 py-1.5 text-xs bg-slate-950 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-medium text-slate-400 mb-1">
+                    Resume Document Title:
+                  </label>
+                  <input
+                    type="text"
+                    value={resume.title}
+                    onChange={(e) => updateResumeField('title', e.target.value)}
+                    className="w-full px-3 py-1.5 text-xs bg-slate-950 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 font-medium"
+                  />
+                </div>
+              </div>
+
+              <div className="mt-4 pt-3 border-t border-slate-800 flex flex-wrap items-center justify-between gap-2 text-xs">
+                <div className="flex items-center space-x-2 text-slate-400">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>State is actively synced to memory and verified</span>
+                </div>
+                <div className="flex items-center space-x-2">
                   <button
-                    key={swatch.label}
-                    onClick={() => copyToClipboard(swatch.hex)}
-                    style={{ backgroundColor: swatch.hex }}
-                    className={`h-24 p-2.5 rounded-xl flex flex-col justify-between transition-transform hover:scale-105 active:scale-95 shadow-md cursor-pointer text-left border ${
-                      swatch.primary ? 'ring-2 ring-white/50 border-white' : 'border-black/10'
-                    }`}
+                    type="button"
+                    onClick={triggerAutosaveFeedback}
+                    className="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-md text-xs font-medium border border-slate-700 transition-colors flex items-center gap-1.5"
                   >
-                    <span className={`text-[11px] font-bold ${swatch.textDark ? 'text-slate-900' : 'text-white'}`}>
-                      {swatch.label.replace('brand-', '')}
-                      {swatch.primary && ' ★'}
-                    </span>
-                    <span className={`text-[10px] font-mono ${swatch.textDark ? 'text-slate-700' : 'text-slate-200'}`}>
-                      {swatch.hex}
-                    </span>
+                    <Save className="w-3.5 h-3.5 text-brand-400" />
+                    Simulate Save Indicator
                   </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Workspace Modules Quick Launcher */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              {[
+                {
+                  id: 'editor' as WorkspaceTab,
+                  title: 'Visual Editor',
+                  desc: 'Edit sections, experience, bullets, and technical skills.',
+                  icon: <FileText className="w-5 h-5 text-brand-400" />
+                },
+                {
+                  id: 'latex' as WorkspaceTab,
+                  title: 'LaTeX Code Engine',
+                  desc: 'Overleaf-grade raw TeX source synchronized with resume.',
+                  icon: <Code2 className="w-5 h-5 text-indigo-400" />
+                },
+                {
+                  id: 'preview' as WorkspaceTab,
+                  title: 'Live Document Preview',
+                  desc: 'Pixel-perfect US Letter paper canvas with zoom & export.',
+                  icon: <Eye className="w-5 h-5 text-emerald-400" />
+                },
+                {
+                  id: 'jd-intelligence' as WorkspaceTab,
+                  title: 'JD Intelligence',
+                  desc: 'Match score matrix & keyword optimization against job targets.',
+                  icon: <Target className="w-5 h-5 text-rose-400" />
+                }
+              ].map((mod) => (
+                <div
+                  key={mod.id}
+                  onClick={() => setActiveTab(mod.id)}
+                  className="p-4 rounded-xl bg-slate-900 border border-slate-800 hover:border-brand-500/50 hover:bg-slate-850 cursor-pointer transition-all flex flex-col justify-between group"
+                >
+                  <div>
+                    <div className="p-2 w-fit rounded-lg bg-slate-800/80 mb-3 group-hover:scale-105 transition-transform">
+                      {mod.icon}
+                    </div>
+                    <h3 className="text-sm font-semibold text-white group-hover:text-brand-300 transition-colors">
+                      {mod.title}
+                    </h3>
+                    <p className="text-xs text-slate-400 mt-1 leading-normal">{mod.desc}</p>
+                  </div>
+                  <div className="mt-4 pt-2 border-t border-slate-800/60 flex items-center justify-between text-xs text-brand-400 font-medium">
+                    <span>Open Module</span>
+                    <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ========================================================= */}
+        {/* TAB 2: VISUAL EDITOR VIEW                                 */}
+        {/* ========================================================= */}
+        {activeTab === 'editor' && (
+          <div className="space-y-6 animate-in fade-in duration-150">
+            <div className="flex items-center justify-between pb-4 border-b border-slate-800">
+              <div>
+                <h1 className="text-xl font-bold text-white flex items-center gap-2">
+                  <FileText className="w-5 h-5 text-brand-400" />
+                  Visual Resume Editor
+                </h1>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Form modifications update the central resume state in real-time.
+                </p>
+              </div>
+              <div className="flex items-center space-x-2">
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('preview')}
+                  className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium rounded-lg border border-slate-700 transition-all flex items-center gap-1.5"
+                >
+                  <Eye className="w-3.5 h-3.5 text-brand-400" />
+                  View Preview
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('latex')}
+                  className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium rounded-lg border border-slate-700 transition-all flex items-center gap-1.5"
+                >
+                  <Code2 className="w-3.5 h-3.5 text-indigo-400" />
+                  View LaTeX
+                </button>
+              </div>
+            </div>
+
+            {/* Section 1: Contact & Header Information */}
+            <div className="p-5 rounded-xl bg-slate-900 border border-slate-800 space-y-4">
+              <h2 className="text-sm font-semibold text-white flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-brand-500"></span>
+                Contact & Header Information
+              </h2>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-[11px] font-medium text-slate-400 mb-1">
+                    Candidate Full Name:
+                  </label>
+                  <input
+                    type="text"
+                    value={resume.header.fullName}
+                    onChange={(e) => updateHeaderField('fullName', e.target.value)}
+                    className="w-full px-3 py-1.5 text-xs bg-slate-950 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-brand-500 font-medium"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-medium text-slate-400 mb-1">
+                    Professional Headline:
+                  </label>
+                  <input
+                    type="text"
+                    value={resume.header.headline || ''}
+                    onChange={(e) => updateHeaderField('headline', e.target.value)}
+                    className="w-full px-3 py-1.5 text-xs bg-slate-950 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-brand-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-medium text-slate-400 mb-1">Email:</label>
+                  <input
+                    type="email"
+                    value={resume.header.email}
+                    onChange={(e) => updateHeaderField('email', e.target.value)}
+                    className="w-full px-3 py-1.5 text-xs bg-slate-950 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-brand-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-medium text-slate-400 mb-1">Phone:</label>
+                  <input
+                    type="text"
+                    value={resume.header.phone}
+                    onChange={(e) => updateHeaderField('phone', e.target.value)}
+                    className="w-full px-3 py-1.5 text-xs bg-slate-950 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-brand-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-medium text-slate-400 mb-1">
+                    Location:
+                  </label>
+                  <input
+                    type="text"
+                    value={resume.header.location}
+                    onChange={(e) => updateHeaderField('location', e.target.value)}
+                    className="w-full px-3 py-1.5 text-xs bg-slate-950 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-brand-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-medium text-slate-400 mb-1">
+                    Portfolio / Website:
+                  </label>
+                  <input
+                    type="text"
+                    value={resume.header.links[3]?.url || 'https://alexvance.dev'}
+                    onChange={(e) => {
+                      const newLinks = [...resume.header.links];
+                      if (newLinks[3]) newLinks[3].url = e.target.value;
+                      updateHeaderField('links', newLinks);
+                    }}
+                    className="w-full px-3 py-1.5 text-xs bg-slate-950 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-brand-500"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Section 2: Professional Summary */}
+            <div className="p-5 rounded-xl bg-slate-900 border border-slate-800 space-y-3">
+              <div className="flex items-center justify-between">
+                <h2 className="text-sm font-semibold text-white flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-brand-500"></span>
+                  Professional Executive Summary
+                </h2>
+                <span className="text-[11px] text-slate-400">
+                  {resume.summary.split(/\s+/).filter(Boolean).length} words
+                </span>
+              </div>
+              <textarea
+                rows={3}
+                value={resume.summary}
+                onChange={(e) => updateResumeField('summary', e.target.value)}
+                className="w-full p-3 text-xs bg-slate-950 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-brand-500 leading-relaxed custom-scrollbar"
+              />
+            </div>
+
+            {/* Section 3: Technical Skills */}
+            <div className="p-5 rounded-xl bg-slate-900 border border-slate-800 space-y-3">
+              <h2 className="text-sm font-semibold text-white flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-brand-500"></span>
+                Categorized Technical Skills
+              </h2>
+              <div className="space-y-3">
+                {resume.skills.map((skillGroup, idx) => (
+                  <div
+                    key={skillGroup.id}
+                    className="p-3 bg-slate-950/70 border border-slate-800 rounded-lg"
+                  >
+                    <div className="text-xs font-semibold text-brand-300 mb-1.5">
+                      {skillGroup.category}:
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {skillGroup.skills.map((s, sIdx) => (
+                        <span
+                          key={sIdx}
+                          className="px-2 py-0.5 text-[11px] bg-slate-800 text-slate-200 rounded border border-slate-700"
+                        >
+                          {s}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
                 ))}
               </div>
             </div>
 
-            {/* Dark Slate Surfaces & Semantic Colors */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* Dark Slate UI Surfaces */}
-              <div className="p-6 rounded-2xl bg-slate-900/60 border border-slate-800 space-y-4">
-                <h3 className="text-base font-semibold text-white flex items-center space-x-2">
-                  <Layers className="w-4 h-4 text-indigo-400" />
-                  <span>Dark Slate Surface Tokens</span>
-                </h3>
-                <p className="text-xs text-slate-400">Structured dark slate tones for high-contrast, eye-friendly SaaS layout hierarchy.</p>
-                <div className="space-y-2">
-                  {darkSlateSwatches.map((item) => (
-                    <div
-                      key={item.label}
-                      onClick={() => copyToClipboard(item.hex)}
-                      className="p-3 rounded-xl bg-slate-950/60 border border-slate-800/80 hover:border-slate-700 flex items-center justify-between cursor-pointer transition"
-                    >
-                      <div className="flex items-center space-x-3">
-                        <div className="w-8 h-8 rounded-lg border border-slate-700 shadow-inner" style={{ backgroundColor: item.hex }} />
-                        <div>
-                          <div className="text-xs font-semibold text-slate-200 font-mono">{item.label}</div>
-                          <div className="text-[11px] text-slate-400">{item.desc}</div>
-                        </div>
+            {/* Section 4: Work Experience */}
+            <div className="p-5 rounded-xl bg-slate-900 border border-slate-800 space-y-4">
+              <h2 className="text-sm font-semibold text-white flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-brand-500"></span>
+                Work Experience Timeline
+              </h2>
+              <div className="space-y-4">
+                {resume.experience.map((exp) => (
+                  <div
+                    key={exp.id}
+                    className="p-4 bg-slate-950/70 border border-slate-800 rounded-lg space-y-2"
+                  >
+                    <div className="flex items-center justify-between text-xs">
+                      <div>
+                        <strong className="text-white text-sm">{exp.position}</strong>
+                        <span className="text-brand-400 font-medium ml-2">@ {exp.company}</span>
                       </div>
-                      <div className="flex items-center space-x-2 text-xs font-mono text-slate-400">
-                        <span>{item.hex}</span>
-                        <Copy className="w-3.5 h-3.5 text-slate-500 hover:text-slate-300" />
-                      </div>
+                      <span className="text-slate-400 font-mono text-[11px]">
+                        {exp.startDate} – {exp.endDate}
+                      </span>
                     </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Semantic Status Colors */}
-              <div className="p-6 rounded-2xl bg-slate-900/60 border border-slate-800 space-y-4">
-                <h3 className="text-base font-semibold text-white flex items-center space-x-2">
-                  <Zap className="w-4 h-4 text-emerald-400" />
-                  <span>Semantic & Intelligence Accents</span>
-                </h3>
-                <p className="text-xs text-slate-400">Distinct functional accents for ATS feedback, AI copilot actions, and status indicators.</p>
-                <div className="space-y-2">
-                  {semanticSwatches.map((item) => (
-                    <div
-                      key={item.label}
-                      onClick={() => copyToClipboard(item.hex)}
-                      className="p-3 rounded-xl bg-slate-950/60 border border-slate-800/80 hover:border-slate-700 flex items-center justify-between cursor-pointer transition"
-                    >
-                      <div className="flex items-center space-x-3">
-                        <div className="w-8 h-8 rounded-lg border border-white/20 shadow-inner" style={{ backgroundColor: item.hex }} />
-                        <div>
-                          <div className="text-xs font-semibold text-slate-200">{item.name}</div>
-                          <div className="text-[11px] font-mono text-slate-400">{item.label}</div>
-                        </div>
-                      </div>
-                      <div className="flex items-center space-x-2 text-xs font-mono text-slate-400">
-                        <span>{item.hex}</span>
-                        <Copy className="w-3.5 h-3.5 text-slate-500 hover:text-slate-300" />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Tab 2: Typography Scales */}
-        {activeTab === 'typography' && (
-          <div className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              {/* Sans-Serif: Inter */}
-              <div className="p-6 rounded-2xl bg-slate-900/60 border border-slate-800 space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-semibold px-2.5 py-1 rounded-lg bg-brand-500/10 text-brand-400 border border-brand-500/20">
-                    SaaS Interface
-                  </span>
-                  <span className="text-xs text-slate-500 font-mono">font-sans</span>
-                </div>
-                <h3 className="text-xl font-bold text-white font-sans">Inter</h3>
-                <p className="text-xs text-slate-400 leading-relaxed">
-                  Clean, modern geometric sans-serif designed for high legibility on computer screens and dashboard interfaces.
-                </p>
-                <div className="p-3 rounded-xl bg-slate-950/60 border border-slate-800/80 font-sans text-xs space-y-1 text-slate-300">
-                  <div className="font-light">Inter Light (300) — Subtext & captions</div>
-                  <div className="font-normal">Inter Regular (400) — Standard body text</div>
-                  <div className="font-medium">Inter Medium (500) — Navigation & form labels</div>
-                  <div className="font-semibold">Inter SemiBold (600) — Section headers</div>
-                  <div className="font-bold">Inter Bold (700) — Prominent titles & metrics</div>
-                </div>
-              </div>
-
-              {/* Serif: Merriweather */}
-              <div className="p-6 rounded-2xl bg-slate-900/60 border border-slate-800 space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-semibold px-2.5 py-1 rounded-lg bg-amber-500/10 text-amber-400 border border-amber-500/20">
-                    Resume Document
-                  </span>
-                  <span className="text-xs text-slate-500 font-mono">font-serif</span>
-                </div>
-                <h3 className="text-xl font-bold text-white font-serif">Merriweather</h3>
-                <p className="text-xs text-slate-400 leading-relaxed">
-                  Refined editorial serif crafted for pleasant reading on executive, academic, and classical paper resume templates.
-                </p>
-                <div className="p-3 rounded-xl bg-slate-950/60 border border-slate-800/80 font-serif text-xs space-y-1 text-slate-300">
-                  <div className="font-normal">Merriweather Regular — Professional resume narrative</div>
-                  <div className="font-bold">Merriweather Bold — Executive section titles</div>
-                  <div className="italic">Merriweather Italic — University honors & role dates</div>
-                </div>
-              </div>
-
-              {/* Monospace: JetBrains Mono */}
-              <div className="p-6 rounded-2xl bg-slate-900/60 border border-slate-800 space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-semibold px-2.5 py-1 rounded-lg bg-purple-500/10 text-purple-400 border border-purple-500/20">
-                    LaTeX & Code
-                  </span>
-                  <span className="text-xs text-slate-500 font-mono">font-mono</span>
-                </div>
-                <h3 className="text-xl font-bold text-white font-mono">JetBrains Mono</h3>
-                <p className="text-xs text-slate-400 leading-relaxed">
-                  Ligature-rich monospaced font tailored for Overleaf LaTeX code editor, diff viewers, and ATS keyword tokens.
-                </p>
-                <div className="p-3 rounded-xl bg-slate-950/60 border border-slate-800/80 font-mono text-xs space-y-1 text-slate-300">
-                  <div>\textbf&#123;Fullstack Engineer&#125;</div>
-                  <div className="text-emerald-400">+ React 19, TypeScript, Node.js</div>
-                  <div className="text-slate-400">&#123; ats_score: 94, verified: true &#125;</div>
-                </div>
-              </div>
-            </div>
-
-            {/* Typographic Scale Hierarchy */}
-            <div className="p-6 rounded-2xl bg-slate-900/60 border border-slate-800 space-y-4">
-              <h3 className="text-base font-semibold text-white">Typographic Hierarchy & Sizing Scale</h3>
-              <div className="space-y-4 divide-y divide-slate-800">
-                <div className="pt-3 flex flex-col sm:flex-row sm:items-baseline justify-between gap-2">
-                  <span className="text-3xl font-extrabold text-white tracking-tight">Display Heading (3xl/4xl)</span>
-                  <span className="text-xs font-mono text-slate-500">32px / 2.25rem — font-extrabold</span>
-                </div>
-                <div className="pt-3 flex flex-col sm:flex-row sm:items-baseline justify-between gap-2">
-                  <span className="text-2xl font-bold text-slate-100">Section Header H2 (2xl)</span>
-                  <span className="text-xs font-mono text-slate-500">24px / 1.5rem — font-bold</span>
-                </div>
-                <div className="pt-3 flex flex-col sm:flex-row sm:items-baseline justify-between gap-2">
-                  <span className="text-lg font-semibold text-slate-200">Subsection Header H3 (lg/xl)</span>
-                  <span className="text-xs font-mono text-slate-500">18px / 1.125rem — font-semibold</span>
-                </div>
-                <div className="pt-3 flex flex-col sm:flex-row sm:items-baseline justify-between gap-2">
-                  <span className="text-sm font-normal text-slate-300">Standard Body Text (sm) — Crisp and readable for long descriptions and resume bullets</span>
-                  <span className="text-xs font-mono text-slate-500">14px / 0.875rem — font-normal</span>
-                </div>
-                <div className="pt-3 flex flex-col sm:flex-row sm:items-baseline justify-between gap-2">
-                  <span className="text-xs font-medium text-slate-400">Metadata & Captions (xs / 11px) — Timestamps, badges, and helper notes</span>
-                  <span className="text-xs font-mono text-slate-500">12px / 0.75rem — font-medium</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Tab 3: UI Component Primitives */}
-        {activeTab === 'components' && (
-          <div className="space-y-6">
-            {/* Buttons & Actions */}
-            <div className="p-6 rounded-2xl bg-slate-900/60 border border-slate-800 space-y-4">
-              <h3 className="text-base font-semibold text-white flex items-center space-x-2">
-                <Sliders className="w-4 h-4 text-brand-400" />
-                <span>Button Primitives & Interactive Micro-Animations</span>
-              </h3>
-              <div className="flex flex-wrap items-center gap-3">
-                <button className="btn-primary">
-                  <Sparkles className="w-4 h-4" />
-                  <span>Primary Brand Action</span>
-                </button>
-                <button className="btn-secondary">
-                  <FileText className="w-4 h-4" />
-                  <span>Secondary Outline</span>
-                </button>
-                <button className="btn-ghost">
-                  <Code2 className="w-4 h-4" />
-                  <span>Ghost Button</span>
-                </button>
-                <button className="inline-flex items-center space-x-1.5 px-3.5 py-2 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 rounded-xl text-xs font-medium transition cursor-pointer active:scale-95">
-                  <AlertCircle className="w-4 h-4" />
-                  <span>Destructive Action</span>
-                </button>
-                <button className="p-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl border border-slate-700 transition cursor-pointer">
-                  <Download className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
-
-            {/* Badges, Status Chips & Form Controls */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* Status Chips */}
-              <div className="p-6 rounded-2xl bg-slate-900/60 border border-slate-800 space-y-4">
-                <h3 className="text-base font-semibold text-white">Status Chips & ATS Badges</h3>
-                <div className="flex flex-wrap gap-2.5">
-                  <span className="badge-emerald">
-                    <CheckCircle2 className="w-3.5 h-3.5" />
-                    <span>ATS Score: 96/100 (Pass)</span>
-                  </span>
-                  <span className="badge-brand">
-                    <Sparkles className="w-3.5 h-3.5" />
-                    <span>AI Copilot Ready</span>
-                  </span>
-                  <span className="badge-amber">
-                    <Zap className="w-3.5 h-3.5" />
-                    <span>Autosaving (240ms)</span>
-                  </span>
-                  <span className="badge-rose">
-                    <AlertCircle className="w-3.5 h-3.5" />
-                    <span>Missing 2 JD Keywords</span>
-                  </span>
-                </div>
-              </div>
-
-              {/* Form Controls & Focus States */}
-              <div className="p-6 rounded-2xl bg-slate-900/60 border border-slate-800 space-y-4">
-                <h3 className="text-base font-semibold text-white">Form Inputs & Micro-Interactions</h3>
-                <div className="space-y-3">
-                  <div className="relative">
-                    <Search className="w-4 h-4 text-slate-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
-                    <input
-                      type="text"
-                      value={sampleInputValue}
-                      onChange={(e) => setSampleInputValue(e.target.value)}
-                      placeholder="Enter target job role..."
-                      className="input-primary pl-10"
-                    />
+                    <ul className="list-disc list-inside space-y-1 text-xs text-slate-300">
+                      {exp.bullets.map((b, bIdx) => (
+                        <li key={bIdx} className="leading-relaxed">
+                          {b}
+                        </li>
+                      ))}
+                    </ul>
                   </div>
-                  <div className="flex items-center justify-between p-3 rounded-xl bg-slate-950/60 border border-slate-800">
-                    <span className="text-xs font-medium text-slate-300">Enable Live ATS Dynamic Scoring</span>
-                    <button
-                      onClick={() => setSampleToggle(!sampleToggle)}
-                      className={`w-11 h-6 rounded-full transition-colors relative cursor-pointer ${
-                        sampleToggle ? 'bg-brand-600' : 'bg-slate-700'
-                      }`}
-                    >
-                      <div
-                        className={`w-4 h-4 rounded-full bg-white transition-transform absolute top-1 ${
-                          sampleToggle ? 'right-1' : 'left-1'
-                        }`}
-                      />
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Glassmorphic Card Showcase */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <div className="glass-panel p-6 rounded-2xl space-y-3">
-                <div className="w-10 h-10 rounded-xl bg-brand-500/10 text-brand-400 border border-brand-500/20 flex items-center justify-center">
-                  <Sparkles className="w-5 h-5" />
-                </div>
-                <h4 className="text-sm font-semibold text-white">Glassmorphic Container</h4>
-                <p className="text-xs text-slate-400 leading-relaxed">
-                  Tailwind backdrop-blur-md combined with translucent slate surfaces creates depth without obscuring background content.
-                </p>
-              </div>
-
-              <div className="glass-card glass-card-hover p-6 rounded-2xl space-y-3 cursor-pointer">
-                <div className="w-10 h-10 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex items-center justify-center">
-                  <ShieldCheck className="w-5 h-5" />
-                </div>
-                <h4 className="text-sm font-semibold text-white">Interactive Card Hover</h4>
-                <p className="text-xs text-slate-400 leading-relaxed">
-                  Smooth transitions with border highlighting and glow shadow for elevated user feedback during navigation.
-                </p>
-              </div>
-
-              <div className="p-6 rounded-2xl bg-slate-900/80 border border-slate-800 space-y-3">
-                <div className="w-10 h-10 rounded-xl bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 flex items-center justify-center">
-                  <Code2 className="w-5 h-5" />
-                </div>
-                <h4 className="text-sm font-semibold text-white">Custom Scrollbar Area</h4>
-                <div className="h-20 overflow-y-auto pr-2 text-xs text-slate-400 space-y-1">
-                  <p>1. Tailored 6px scrollbars</p>
-                  <p>2. Slate-800 background tracks</p>
-                  <p>3. Slate-600 rounded thumb grips</p>
-                  <p>4. Smooth scroll animations</p>
-                  <p>5. Zero horizontal scroll overflow</p>
-                </div>
+                ))}
               </div>
             </div>
           </div>
         )}
 
-        {/* Tab 4: Responsive Layout Simulator */}
-        {activeTab === 'responsive' && (
-          <div className="space-y-6">
-            <div className="p-6 rounded-2xl bg-slate-900/60 border border-slate-800 space-y-4">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div>
-                  <h3 className="text-base font-semibold text-white flex items-center space-x-2">
-                    <Layout className="w-4 h-4 text-brand-400" />
-                    <span>Responsive Breakpoint & Viewport Simulator</span>
-                  </h3>
-                  <p className="text-xs text-slate-400">Test how the layout shell and component grid respond across various device widths.</p>
-                </div>
-
-                <div className="flex items-center space-x-2 bg-slate-950 p-1 rounded-xl border border-slate-800 self-start sm:self-auto">
-                  <button
-                    onClick={() => setViewportMode('desktop')}
-                    className={`inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer ${
-                      viewportMode === 'desktop' ? 'bg-brand-600 text-white' : 'text-slate-400 hover:text-white'
-                    }`}
-                  >
-                    <Monitor className="w-3.5 h-3.5" />
-                    <span>Desktop (100%)</span>
-                  </button>
-                  <button
-                    onClick={() => setViewportMode('tablet')}
-                    className={`inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer ${
-                      viewportMode === 'tablet' ? 'bg-brand-600 text-white' : 'text-slate-400 hover:text-white'
-                    }`}
-                  >
-                    <Tablet className="w-3.5 h-3.5" />
-                    <span>Tablet (768px)</span>
-                  </button>
-                  <button
-                    onClick={() => setViewportMode('mobile')}
-                    className={`inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer ${
-                      viewportMode === 'mobile' ? 'bg-brand-600 text-white' : 'text-slate-400 hover:text-white'
-                    }`}
-                  >
-                    <Smartphone className="w-3.5 h-3.5" />
-                    <span>Mobile (375px)</span>
-                  </button>
-                </div>
+        {/* ========================================================= */}
+        {/* TAB 3: LATEX CODE VIEW                                    */}
+        {/* ========================================================= */}
+        {activeTab === 'latex' && (
+          <div className="space-y-4 animate-in fade-in duration-150">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-slate-800 gap-3">
+              <div>
+                <h1 className="text-xl font-bold text-white flex items-center gap-2">
+                  <Code2 className="w-5 h-5 text-indigo-400" />
+                  LaTeX Code Engine (Synchronized)
+                </h1>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Overleaf-grade LaTeX source dynamically generated from the active resume state.
+                </p>
               </div>
-
-              {/* Viewport Frame */}
-              <div className="mt-4 p-4 rounded-2xl bg-slate-950 border border-slate-800/80 flex justify-center overflow-x-auto">
-                <div
-                  className={`transition-all duration-300 border border-slate-800 rounded-2xl bg-slate-900/90 p-5 space-y-4 shadow-2xl ${
-                    viewportMode === 'desktop'
-                      ? 'w-full'
-                      : viewportMode === 'tablet'
-                      ? 'w-[768px]'
-                      : 'w-[375px]'
-                  }`}
+              <div className="flex items-center space-x-2">
+                <button
+                  type="button"
+                  onClick={handleCopyLatex}
+                  className="flex items-center space-x-1.5 px-3 py-1.5 bg-brand-600 hover:bg-brand-500 text-white text-xs font-semibold rounded-lg transition-colors shadow-sm"
                 >
-                  <div className="flex items-center justify-between pb-3 border-b border-slate-800">
-                    <div className="flex items-center space-x-2">
-                      <div className="w-3 h-3 rounded-full bg-rose-500/80" />
-                      <div className="w-3 h-3 rounded-full bg-amber-500/80" />
-                      <div className="w-3 h-3 rounded-full bg-emerald-500/80" />
-                    </div>
-                    <span className="text-[11px] font-mono text-slate-500">
-                      {viewportMode === 'desktop' ? '1280px × 800px (Desktop)' : viewportMode === 'tablet' ? '768px × 1024px (Tablet)' : '375px × 812px (Mobile)'}
-                    </span>
-                  </div>
-
-                  {/* Mock Layout Wireframe */}
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                    <div className="p-3 rounded-xl bg-slate-950/80 border border-slate-800/80 space-y-1.5">
-                      <span className="text-[11px] font-semibold text-brand-400">Panel 1: Navigation</span>
-                      <p className="text-[10px] text-slate-400">Active tab state & quick shortcuts</p>
-                    </div>
-                    <div className="p-3 rounded-xl bg-slate-950/80 border border-slate-800/80 space-y-1.5">
-                      <span className="text-[11px] font-semibold text-indigo-400">Panel 2: Editor</span>
-                      <p className="text-[10px] text-slate-400">Live resume form fields</p>
-                    </div>
-                    <div className="p-3 rounded-xl bg-slate-950/80 border border-slate-800/80 space-y-1.5">
-                      <span className="text-[11px] font-semibold text-emerald-400">Panel 3: Preview</span>
-                      <p className="text-[10px] text-slate-400">Paper document canvas</p>
-                    </div>
-                  </div>
-                </div>
+                  {copiedLatex ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                  <span>{copiedLatex ? 'Copied TeX' : 'Copy LaTeX'}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('preview')}
+                  className="flex items-center space-x-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium rounded-lg border border-slate-700 transition-colors"
+                >
+                  <Eye className="w-3.5 h-3.5 text-brand-400" />
+                  <span>Preview PDF</span>
+                </button>
               </div>
+            </div>
+
+            {/* LaTeX Code Box */}
+            <div className="rounded-xl border border-slate-800 bg-slate-950 overflow-hidden shadow-2xl">
+              <div className="bg-slate-900/90 px-4 py-2 border-b border-slate-800 flex items-center justify-between text-xs text-slate-400">
+                <span className="font-mono flex items-center gap-2 text-indigo-300">
+                  <Code2 className="w-4 h-4 text-indigo-400" />
+                  resume_document.tex (Live compiled from React State)
+                </span>
+                <span className="text-[11px] font-mono text-slate-500">UTF-8 · LaTeX 2e</span>
+              </div>
+              <pre className="p-4 text-xs font-mono text-slate-300 overflow-x-auto max-h-[600px] leading-relaxed custom-scrollbar selection:bg-indigo-500/30">
+                <code>{generateLatexFromResume(resume)}</code>
+              </pre>
             </div>
           </div>
         )}
 
-        {/* Tab 5: Diagnostic Audit */}
-        {activeTab === 'diagnostics' && (
-          <div className="space-y-6">
-            <div className="p-6 rounded-2xl bg-slate-900/60 border border-slate-800 space-y-4">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-800">
-                <div>
-                  <h3 className="text-base font-semibold text-white flex items-center space-x-2">
-                    <ShieldCheck className="w-4 h-4 text-emerald-400" />
-                    <span>Design System & Server Diagnostic Verification</span>
-                  </h3>
-                  <p className="text-xs text-slate-400 mt-0.5">Validate live server endpoints and design system configuration state.</p>
+        {/* ========================================================= */}
+        {/* TAB 4: LIVE PREVIEW VIEW                                  */}
+        {/* ========================================================= */}
+        {activeTab === 'preview' && (
+          <div className="space-y-4 animate-in fade-in duration-150">
+            {/* Toolbar */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-slate-800 gap-3">
+              <div>
+                <h1 className="text-xl font-bold text-white flex items-center gap-2">
+                  <Eye className="w-5 h-5 text-emerald-400" />
+                  Live Document Paper Preview
+                </h1>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  High-fidelity true-to-scale US Letter canvas simulating exact print typography.
+                </p>
+              </div>
+              <div className="flex items-center space-x-2">
+                <div className="flex items-center bg-slate-900 border border-slate-800 rounded-lg px-2 py-1 space-x-2 text-xs">
+                  <button
+                    onClick={() => setPreviewZoom(Math.max(75, previewZoom - 10))}
+                    className="text-slate-400 hover:text-white"
+                  >
+                    -
+                  </button>
+                  <span className="font-mono text-slate-300">{previewZoom}%</span>
+                  <button
+                    onClick={() => setPreviewZoom(Math.min(130, previewZoom + 10))}
+                    className="text-slate-400 hover:text-white"
+                  >
+                    +
+                  </button>
                 </div>
                 <button
-                  onClick={fetchDiagnostics}
-                  disabled={loading}
-                  className="btn-primary self-start sm:self-auto"
+                  type="button"
+                  onClick={() => window.print()}
+                  className="flex items-center space-x-1.5 px-3 py-1.5 bg-brand-600 hover:bg-brand-500 text-white text-xs font-semibold rounded-lg shadow-sm transition-all"
                 >
-                  <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
-                  <span>{loading ? 'Auditing...' : 'Re-run Audit'}</span>
+                  <Download className="w-3.5 h-3.5" />
+                  <span>Print / Save PDF</span>
                 </button>
               </div>
+            </div>
 
-              {error && (
-                <div className="p-4 bg-rose-500/10 border border-rose-500/20 rounded-xl text-rose-300 text-xs flex items-center space-x-2">
-                  <AlertCircle className="w-4 h-4 text-rose-400 flex-shrink-0" />
-                  <span>{error}</span>
+            {/* Paper Canvas Simulation */}
+            <div className="flex justify-center p-4 sm:p-8 bg-slate-900/60 rounded-2xl border border-slate-800/80 overflow-x-auto custom-scrollbar">
+              <div
+                style={{ transform: `scale(${previewZoom / 100})`, transformOrigin: 'top center' }}
+                className="w-full max-w-[800px] bg-white text-slate-900 shadow-2xl rounded-sm p-8 sm:p-12 font-serif text-[13px] leading-normal transition-transform duration-200 select-text"
+              >
+                {/* Header */}
+                <div className="text-center pb-4 border-b border-slate-300 mb-4">
+                  <h1 className="text-2xl font-bold text-slate-900 uppercase tracking-wide">
+                    {resume.header.fullName}
+                  </h1>
+                  <p className="text-xs font-sans text-slate-600 mt-1">
+                    {resume.header.phone} &bull; {resume.header.email} &bull; {resume.header.location}
+                  </p>
+                  {resume.header.headline && (
+                    <p className="text-xs font-sans font-medium text-brand-700 mt-1">
+                      {resume.header.headline}
+                    </p>
+                  )}
                 </div>
-              )}
 
-              {diagnosticData && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                  <div className="p-4 rounded-xl bg-slate-950/70 border border-slate-800/80">
-                    <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block mb-1">Theme</span>
-                    <span className="text-xs font-semibold text-brand-400">{diagnosticData.matrix.designSystem?.theme || 'Dark Slate & Brand Blue'}</span>
-                  </div>
-                  <div className="p-4 rounded-xl bg-slate-950/70 border border-slate-800/80">
-                    <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block mb-1">Typography</span>
-                    <span className="text-xs font-semibold text-slate-200">Inter, Merriweather, JetBrains</span>
-                  </div>
-                  <div className="p-4 rounded-xl bg-slate-950/70 border border-slate-800/80">
-                    <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block mb-1">Responsive Shell</span>
-                    <span className="inline-flex items-center text-xs font-medium text-emerald-400">
-                      <CheckCircle2 className="w-3.5 h-3.5 mr-1" /> Active
-                    </span>
-                  </div>
-                  <div className="p-4 rounded-xl bg-slate-950/70 border border-slate-800/80">
-                    <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block mb-1">Glassmorphism</span>
-                    <span className="inline-flex items-center text-xs font-medium text-emerald-400">
-                      <CheckCircle2 className="w-3.5 h-3.5 mr-1" /> Configured
-                    </span>
-                  </div>
+                {/* Summary */}
+                <div className="mb-4">
+                  <h2 className="text-xs font-bold uppercase tracking-wider text-slate-800 pb-1 border-b border-slate-300 mb-2">
+                    Professional Summary
+                  </h2>
+                  <p className="text-xs text-slate-700 leading-relaxed text-justify">
+                    {resume.summary}
+                  </p>
                 </div>
-              )}
 
-              {diagnosticData && (
-                <div className="mt-4">
-                  <div className="text-xs font-medium text-slate-400 mb-2 flex items-center justify-between">
-                    <span>Diagnostic Payload:</span>
-                    <span className="text-[11px] text-slate-500 font-mono">{diagnosticData.timestamp}</span>
+                {/* Experience */}
+                <div className="mb-4">
+                  <h2 className="text-xs font-bold uppercase tracking-wider text-slate-800 pb-1 border-b border-slate-300 mb-2">
+                    Work Experience
+                  </h2>
+                  <div className="space-y-3">
+                    {resume.experience.map((exp) => (
+                      <div key={exp.id}>
+                        <div className="flex justify-between items-baseline font-bold text-xs text-slate-900">
+                          <span>
+                            {exp.company} &mdash;{' '}
+                            <span className="font-normal italic">{exp.position}</span>
+                          </span>
+                          <span className="text-[11px] font-sans text-slate-600">
+                            {exp.startDate} &ndash; {exp.endDate}
+                          </span>
+                        </div>
+                        <ul className="list-disc list-outside ml-4 mt-1 space-y-0.5 text-xs text-slate-700">
+                          {exp.bullets.map((b, bIdx) => (
+                            <li key={bIdx}>{b}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    ))}
                   </div>
-                  <pre className="text-xs font-mono text-emerald-400 bg-slate-950/90 p-4 rounded-xl border border-slate-800/80 overflow-x-auto">
-                    {JSON.stringify(diagnosticData, null, 2)}
-                  </pre>
                 </div>
-              )}
+
+                {/* Technical Skills */}
+                <div className="mb-4">
+                  <h2 className="text-xs font-bold uppercase tracking-wider text-slate-800 pb-1 border-b border-slate-300 mb-2">
+                    Technical Skills
+                  </h2>
+                  <div className="space-y-1 text-xs text-slate-700">
+                    {resume.skills.map((s) => (
+                      <div key={s.id}>
+                        <strong className="text-slate-900">{s.category}:</strong>{' '}
+                        {s.skills.join(', ')}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Education */}
+                <div>
+                  <h2 className="text-xs font-bold uppercase tracking-wider text-slate-800 pb-1 border-b border-slate-300 mb-2">
+                    Education
+                  </h2>
+                  {resume.education.map((edu) => (
+                    <div key={edu.id} className="flex justify-between items-baseline text-xs">
+                      <div>
+                        <strong className="text-slate-900">{edu.institution}</strong> &mdash;{' '}
+                        <span className="italic">{edu.degree}</span>
+                      </div>
+                      <span className="text-[11px] font-sans text-slate-600">
+                        {edu.startDate} &ndash; {edu.endDate}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
           </div>
         )}
+
+        {/* ========================================================= */}
+        {/* TAB 5: JD INTELLIGENCE VIEW                               */}
+        {/* ========================================================= */}
+        {activeTab === 'jd-intelligence' && (
+          <div className="space-y-6 animate-in fade-in duration-150">
+            <div className="flex items-center justify-between pb-4 border-b border-slate-800">
+              <div>
+                <h1 className="text-xl font-bold text-white flex items-center gap-2">
+                  <Target className="w-5 h-5 text-rose-400" />
+                  Job Description Intelligence Matrix
+                </h1>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  AI match analysis comparing active resume{' '}
+                  <strong className="text-white">"{resume.title}"</strong> with target role.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setActiveTab('diff')}
+                className="px-3.5 py-2 bg-brand-600 hover:bg-brand-500 text-white text-xs font-semibold rounded-lg shadow-md transition-all flex items-center gap-1.5"
+              >
+                <GitCompare className="w-3.5 h-3.5" />
+                <span>View Recommended Diffs</span>
+              </button>
+            </div>
+
+            {/* Target Job Header Card */}
+            <div className="p-5 rounded-xl bg-slate-900 border border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div>
+                <span className="text-[10px] font-bold uppercase tracking-wider text-brand-400 bg-brand-500/10 px-2 py-0.5 rounded border border-brand-500/20">
+                  Target Role
+                </span>
+                <h2 className="text-lg font-bold text-white mt-1">
+                  Senior Staff AI Systems & Full Stack Engineer
+                </h2>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Company: Google Cloud & Core Systems &bull; Level: L6 / Staff &bull; Match:{' '}
+                  <span className="text-emerald-400 font-bold">87% Overall ATS Alignment</span>
+                </p>
+              </div>
+              <div className="text-right">
+                <div className="text-3xl font-extrabold text-emerald-400">87%</div>
+                <div className="text-[11px] text-slate-400">High Interview Probability</div>
+              </div>
+            </div>
+
+            {/* Skill Gap Analysis */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="p-4 rounded-xl bg-slate-900 border border-slate-800">
+                <h3 className="text-xs font-semibold text-emerald-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                  <CheckCircle2 className="w-4 h-4" />
+                  Matching Keywords Found in Resume (14)
+                </h3>
+                <div className="flex flex-wrap gap-1.5">
+                  {[
+                    'TypeScript',
+                    'React 19',
+                    'Node.js',
+                    'Express',
+                    'PostgreSQL',
+                    'Supabase',
+                    'Microservices',
+                    'Docker',
+                    'Redis',
+                    'GraphQL',
+                    'Python',
+                    'REST APIs',
+                    'CI/CD',
+                    'Tailwind CSS'
+                  ].map((kw, i) => (
+                    <span
+                      key={i}
+                      className="px-2 py-1 text-xs bg-emerald-500/10 text-emerald-300 border border-emerald-500/20 rounded-md font-medium"
+                    >
+                      {kw}
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              <div className="p-4 rounded-xl bg-slate-900 border border-slate-800">
+                <h3 className="text-xs font-semibold text-amber-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                  <AlertCircle className="w-4 h-4" />
+                  Missing Recommended Keywords (3)
+                </h3>
+                <div className="flex flex-wrap gap-1.5">
+                  {['Kubernetes', 'Next.js 15', 'Distributed Caching (Memcached)'].map((kw, i) => (
+                    <span
+                      key={i}
+                      className="px-2 py-1 text-xs bg-amber-500/10 text-amber-300 border border-amber-500/20 rounded-md font-medium"
+                    >
+                      {kw}
+                    </span>
+                  ))}
+                </div>
+                <p className="text-[11px] text-slate-400 mt-3">
+                  These missing skills can be automatically patched via the{' '}
+                  <strong className="text-white cursor-pointer" onClick={() => setActiveTab('diff')}>
+                    AI Changes tab
+                  </strong>
+                  .
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ========================================================= */}
+        {/* TAB 6: AI CHANGES (DIFF) VIEW                             */}
+        {/* ========================================================= */}
+        {activeTab === 'diff' && (
+          <div className="space-y-6 animate-in fade-in duration-150">
+            <div className="flex items-center justify-between pb-4 border-b border-slate-800">
+              <div>
+                <h1 className="text-xl font-bold text-white flex items-center gap-2">
+                  <GitCompare className="w-5 h-5 text-amber-400" />
+                  AI Suggested Improvements & Diff Viewer
+                </h1>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Accepting diffs applies optimizations directly to the active resume state.
+                </p>
+              </div>
+              <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-amber-500/10 text-amber-300 border border-amber-500/30">
+                {unappliedDiffsCount} Pending Diffs
+              </span>
+            </div>
+
+            <div className="space-y-4">
+              {pendingDiffs.map((diff) => (
+                <div
+                  key={diff.id}
+                  className={`p-4 rounded-xl border transition-all ${
+                    diff.applied
+                      ? 'bg-slate-900/40 border-slate-800/60 opacity-60'
+                      : 'bg-slate-900 border-slate-800'
+                  }`}
+                >
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center space-x-2">
+                      <span className="text-xs font-bold text-brand-400 uppercase tracking-wider">
+                        {diff.section}
+                      </span>
+                      <span className="text-xs text-slate-400">&bull;</span>
+                      <span className="text-xs font-semibold text-white">{diff.title}</span>
+                    </div>
+                    {diff.applied ? (
+                      <span className="text-xs font-bold text-emerald-400 flex items-center gap-1">
+                        <CheckCircle2 className="w-4 h-4" />
+                        Applied
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => handleApplyDiff(diff.id)}
+                        className="px-3 py-1 bg-brand-600 hover:bg-brand-500 text-white rounded-lg text-xs font-semibold transition-colors flex items-center gap-1"
+                      >
+                        <Check className="w-3.5 h-3.5" />
+                        Apply to Resume
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3 text-xs">
+                    <div className="p-3 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-200">
+                      <span className="block text-[10px] font-bold uppercase tracking-wider text-rose-400 mb-1">
+                        Current Value:
+                      </span>
+                      {diff.original}
+                    </div>
+                    <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-200">
+                      <span className="block text-[10px] font-bold uppercase tracking-wider text-emerald-400 mb-1">
+                        AI Recommended Value:
+                      </span>
+                      {diff.suggestion}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ========================================================= */}
+        {/* TAB 7: HEALTH CHECK VIEW                                  */}
+        {/* ========================================================= */}
+        {activeTab === 'health-check' && (
+          <div className="space-y-6 animate-in fade-in duration-150">
+            <div className="flex items-center justify-between pb-4 border-b border-slate-800">
+              <div>
+                <h1 className="text-xl font-bold text-white flex items-center gap-2">
+                  <Stethoscope className="w-5 h-5 text-cyan-400" />
+                  Automated Resume Health Diagnostic
+                </h1>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Static analysis checking ATS compliance, grammar, metrics, and bullet strength.
+                </p>
+              </div>
+              <div className="flex items-center space-x-2">
+                <span className="text-xl font-extrabold text-cyan-400">96 / 100</span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="p-4 rounded-xl bg-slate-900 border border-slate-800">
+                <h3 className="text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
+                  ATS Parser Compatibility
+                </h3>
+                <div className="text-2xl font-bold text-emerald-400">100%</div>
+                <p className="text-xs text-slate-400 mt-1">
+                  Clean single-column parsing, zero unreadable text frames or complex SVGs.
+                </p>
+              </div>
+              <div className="p-4 rounded-xl bg-slate-900 border border-slate-800">
+                <h3 className="text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
+                  Quantified Metrics Density
+                </h3>
+                <div className="text-2xl font-bold text-emerald-400">92%</div>
+                <p className="text-xs text-slate-400 mt-1">
+                  7 of 8 experience and project bullets include measurable percentage or latency metrics.
+                </p>
+              </div>
+              <div className="p-4 rounded-xl bg-slate-900 border border-slate-800">
+                <h3 className="text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
+                  Action Verb Diversity
+                </h3>
+                <div className="text-2xl font-bold text-cyan-400">95%</div>
+                <p className="text-xs text-slate-400 mt-1">
+                  Strong verbs used: Architected, Engineered, Spearheaded, Optimized.
+                </p>
+              </div>
+            </div>
+
+            {/* Diagnostic Item List */}
+            <div className="p-5 rounded-xl bg-slate-900 border border-slate-800 space-y-3">
+              <h3 className="text-sm font-semibold text-white">Diagnostic Rule Checks</h3>
+              <div className="space-y-2 text-xs">
+                <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-lg flex items-center justify-between text-emerald-200">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                    <span>Contact information contains valid email, phone, and location</span>
+                  </div>
+                  <span className="font-semibold text-emerald-400">PASS</span>
+                </div>
+                <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-lg flex items-center justify-between text-emerald-200">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                    <span>Experience dates are consistently ordered (chronological reverse)</span>
+                  </div>
+                  <span className="font-semibold text-emerald-400">PASS</span>
+                </div>
+                <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg flex items-center justify-between text-amber-200">
+                  <div className="flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 text-amber-400" />
+                    <span>GitHub profile link recommended for Software Engineering role</span>
+                  </div>
+                  <span className="font-semibold text-amber-400">INFO</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ========================================================= */}
+        {/* TAB 8: CONTENT LIBRARY VIEW                               */}
+        {/* ========================================================= */}
+        {activeTab === 'content-library' && (
+          <div className="space-y-6 animate-in fade-in duration-150">
+            <div className="flex items-center justify-between pb-4 border-b border-slate-800">
+              <div>
+                <h1 className="text-xl font-bold text-white flex items-center gap-2">
+                  <Bookmark className="w-5 h-5 text-brand-400" />
+                  Personal Content & Achievement Library
+                </h1>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Modular career snippets, bullets, and verified projects for instant insertion.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => showToast('Library item created')}
+                className="flex items-center space-x-1.5 px-3 py-1.5 bg-brand-600 hover:bg-brand-500 text-white text-xs font-semibold rounded-lg shadow-sm"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Save New Snippet</span>
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {[
+                {
+                  category: 'Work Bullet',
+                  title: 'Distributed Transaction Processing',
+                  content:
+                    'Engineered distributed 2-phase commit transaction processing engine in Go, processing $40M+ in daily settlement transactions with zero ledger drift.',
+                  tags: ['Go', 'Fintech', 'Concurrency', 'High Volume']
+                },
+                {
+                  category: 'Work Bullet',
+                  title: 'PostgreSQL Query Optimization',
+                  content:
+                    'Refactored unindexed join queries on 100M+ row user table, reducing p99 response time from 1.8s to 42ms and saving $14,000/mo in RDS compute.',
+                  tags: ['PostgreSQL', 'Performance', 'Database', 'Indexing']
+                },
+                {
+                  category: 'Project',
+                  title: 'RAG Knowledge Agent with Vector Embeddings',
+                  content:
+                    'Built end-to-end RAG system using LangChain, pgvector, and Gemini LLM to query internal engineering documentation with sub-second accuracy.',
+                  tags: ['Python', 'Gemini', 'Vector Search', 'AI']
+                },
+                {
+                  category: 'Achievement',
+                  title: 'Hackathon Top Innovator',
+                  content:
+                    'Won 1st Place overall at SF Bay Tech Hackathon among 120 teams for building an automated accessibility screener.',
+                  tags: ['Awards', 'Leadership', 'Hackathon']
+                }
+              ].map((item, idx) => (
+                <div key={idx} className="p-4 rounded-xl bg-slate-900 border border-slate-800 space-y-2">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-bold text-brand-400 uppercase tracking-wider text-[10px] px-2 py-0.5 rounded bg-brand-500/10 border border-brand-500/20">
+                      {item.category}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        updateResumeField('summary', `${resume.summary} ${item.content}`);
+                        showToast(`Inserted "${item.title}" into resume summary!`);
+                      }}
+                      className="text-brand-400 hover:text-brand-300 font-medium text-xs flex items-center gap-1"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      Insert into Resume
+                    </button>
+                  </div>
+                  <h4 className="text-sm font-semibold text-white">{item.title}</h4>
+                  <p className="text-xs text-slate-300 leading-relaxed">{item.content}</p>
+                  <div className="flex flex-wrap gap-1 pt-2">
+                    {item.tags.map((t, tIdx) => (
+                      <span
+                        key={tIdx}
+                        className="text-[10px] px-1.5 py-0.2 bg-slate-800 text-slate-400 rounded"
+                      >
+                        #{t}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
       </main>
+
+      {/* Persistent Bottom Status Bar across all 8 Tabs */}
+      <footer className="bg-slate-900/90 border-t border-slate-800/80 px-4 sm:px-8 py-2 text-xs text-slate-400 flex flex-wrap items-center justify-between gap-2 select-none">
+        <div className="flex items-center space-x-3">
+          <span className="flex items-center gap-1 text-slate-300">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+            Active Workspace: <strong className="text-white capitalize">{activeTab}</strong>
+          </span>
+          <span className="text-slate-600 hidden sm:inline">&bull;</span>
+          <span className="hidden sm:inline text-slate-400">
+            Candidate: <strong className="text-slate-200">{resume.header.fullName}</strong>
+          </span>
+          <span className="text-slate-600 hidden md:inline">&bull;</span>
+          <span className="hidden md:inline text-slate-400">
+            Document: <strong className="text-slate-200">{resume.title}</strong>
+          </span>
+        </div>
+
+        <div className="flex items-center space-x-4">
+          <span className="text-[11px] text-slate-400 font-mono">
+            {isSaving ? (
+              <span className="text-amber-400 flex items-center gap-1">
+                <RefreshCw className="w-3 h-3 animate-spin" /> Saving...
+              </span>
+            ) : (
+              <span className="text-emerald-400 flex items-center gap-1">
+                <CheckCircle2 className="w-3 h-3" /> State Persisted
+              </span>
+            )}
+          </span>
+          <span className="text-slate-600">&bull;</span>
+          <span className="text-[11px] text-brand-400 font-medium">Checkpoint 05 Verified</span>
+        </div>
+      </footer>
+
     </div>
   );
 }

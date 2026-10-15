@@ -9,7 +9,7 @@ router.get('/status', (req: Request, res: Response) => {
   res.json({
     status: 'online',
     product: 'ResumeSync (Resume Intelligence Copilot)',
-    checkpoint: '04 - Design System & Modern UI Foundation',
+    checkpoint: '05 - Application Shell & Navigation Engine',
     timestamp: new Date().toISOString()
   });
 });
@@ -27,7 +27,7 @@ router.get('/config-status', (req: Request, res: Response) => {
   const isGoogleOAuthConfigured = Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET);
 
   res.json({
-    checkpoint: '04 - Design System & Modern UI Foundation',
+    checkpoint: '05 - Application Shell & Navigation Engine',
     status: 'verified',
     timestamp: new Date().toISOString(),
     matrix: {
@@ -55,6 +55,22 @@ router.get('/config-status', (req: Request, res: Response) => {
         responsiveShell: 'Active',
         glassmorphicHeaders: 'Active',
         customScrollbars: 'Configured'
+      },
+      navigationEngine: {
+        activeTabRouting: 'State-driven persistent router',
+        workspaceTabs: [
+          'dashboard',
+          'editor',
+          'latex',
+          'preview',
+          'jd-intelligence',
+          'diff',
+          'health-check',
+          'content-library'
+        ],
+        totalTabs: 8,
+        autosaveIndicator: 'Debounced active state feedback',
+        versionSelector: 'Version snapshotting & instant restore'
       }
     }
   });
