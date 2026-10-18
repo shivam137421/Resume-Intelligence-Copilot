@@ -38,8 +38,10 @@ import {
   createInitialVersions,
   generateLatexFromResume
 } from './utils/defaultResume';
+import { AuthProvider, useAuth } from './context/AuthContext';
 
-export function App() {
+function WorkspaceContent() {
+  const { isSupabaseConnected } = useAuth();
   // Navigation & Workspace State
   const [activeTab, setActiveTab] = useState<WorkspaceTab>('dashboard');
   const [resume, setResume] = useState<ResumeData>(() => createInitialResume());
@@ -243,7 +245,21 @@ export function App() {
                     Resume Intelligence Hub
                   </h1>
                   <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                    Checkpoint 05 Active
+                    Checkpoint 06 Active
+                  </span>
+                  <span
+                    className={`text-xs font-semibold px-2.5 py-0.5 rounded-full border flex items-center gap-1.5 ${
+                      isSupabaseConnected
+                        ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                        : 'bg-amber-500/10 text-amber-400 border-amber-500/20'
+                    }`}
+                  >
+                    <span
+                      className={`w-1.5 h-1.5 rounded-full ${
+                        isSupabaseConnected ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'
+                      }`}
+                    />
+                    {isSupabaseConnected ? 'Supabase Cloud' : 'Offline Fallback Active'}
                   </span>
                 </div>
                 <p className="text-xs text-slate-400 mt-1">
@@ -1232,11 +1248,19 @@ export function App() {
             )}
           </span>
           <span className="text-slate-600">&bull;</span>
-          <span className="text-[11px] text-brand-400 font-medium">Checkpoint 05 Verified</span>
+          <span className="text-[11px] text-brand-400 font-medium">Checkpoint 06 Verified</span>
         </div>
       </footer>
 
     </div>
+  );
+}
+
+export function App() {
+  return (
+    <AuthProvider>
+      <WorkspaceContent />
+    </AuthProvider>
   );
 }
 

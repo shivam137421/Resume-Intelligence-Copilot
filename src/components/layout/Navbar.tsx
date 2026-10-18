@@ -23,6 +23,7 @@ import {
   ChevronDown
 } from 'lucide-react';
 import { WorkspaceTab, ResumeData, ResumeVersion } from '../../types/resume';
+import { useAuth } from '../../context/AuthContext';
 
 export interface NavbarProps {
   activeTab: WorkspaceTab;
@@ -51,6 +52,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   healthBadge = 2,
   onSimulateAutosave
 }) => {
+  const { user, isSupabaseConnected, logout } = useAuth();
   const [showVersionMenu, setShowVersionMenu] = useState(false);
   const [newVersionName, setNewVersionName] = useState('');
   const [showExportModal, setShowExportModal] = useState(false);
@@ -284,10 +286,20 @@ export const Navbar: React.FC<NavbarProps> = ({
                 type="button"
                 onClick={() => setShowAuthModal(true)}
                 className="flex items-center space-x-1.5 px-2.5 sm:px-3 py-1.5 text-xs font-medium text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 rounded-lg transition-colors border border-slate-700"
-                title="Guest Session / Sign In"
+                title={user?.isGuest ? 'Guest Session (Offline Fallback Engine)' : `Signed in as ${user?.email}`}
               >
-                <User className="w-3.5 h-3.5 text-brand-400" />
-                <span className="hidden sm:inline">Guest Workspace</span>
+                <div className="relative flex items-center justify-center">
+                  <User className="w-3.5 h-3.5 text-brand-400" />
+                  <span
+                    className={`absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full ${
+                      isSupabaseConnected ? 'bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.8)]' : 'bg-amber-400'
+                    }`}
+                    title={isSupabaseConnected ? 'Supabase Connected' : 'Offline Fallback Engine'}
+                  />
+                </div>
+                <span className="hidden sm:inline font-medium">
+                  {user ? (user.isGuest ? 'Guest Workspace' : user.fullName || user.email) : 'Guest Workspace'}
+                </span>
               </button>
             </div>
 
@@ -457,23 +469,66 @@ export const Navbar: React.FC<NavbarProps> = ({
               </button>
             </div>
             <div className="py-4 space-y-3">
-              <div className="p-3 bg-slate-800/80 rounded-xl border border-slate-700 text-xs">
-                <div className="font-semibold text-emerald-400 flex items-center gap-1.5 mb-1">
-                  <CheckCircle2 className="w-4 h-4" />
-                  Local Guest Workspace Active
+              <div className="p-3 bg-slate-800/80 rounded-xl border border-slate-700 text-xs space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="font-semibold text-white flex items-center gap-1.5">
+                    <span className={`w-2 h-2 rounded-full ${isSupabaseConnected ? 'bg-emerald-400' : 'bg-amber-400'}`} />
+                    {user?.isGuest ? 'Local Guest Workspace' : 'Authenticated Profile'}
+                  </span>
+                  <span
+                    className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${
+                      isSupabaseConnected
+                        ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                        : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                    }`}
+                  >
+                    {isSupabaseConnected ? 'Supabase Connected' : 'Offline Fallback'}
+                  </span>
                 </div>
-                <p className="text-slate-300">
-                  All active resume modifications, tabs, and version states persist locally in browser session storage without requiring cloud credentials.
+
+                <div className="text-slate-300 space-y-1.5 pt-2 border-t border-slate-700/60 font-mono text-[11px]">
+                  <div className="flex justify-between">
+                    <span className="text-slate-400 font-sans">User:</span>
+                    <span className="text-white">{user?.fullName || 'Alex Vance'}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-400 font-sans">Email:</span>
+                    <span className="text-white">{user?.email || 'alex.vance@example.com'}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-400 font-sans">BaaS Provider:</span>
+                    <span className="text-brand-300">
+                      {isSupabaseConnected ? 'Supabase Cloud (PostgreSQL)' : 'Offline Local Storage'}
+                    </span>
+                  </div>
+                </div>
+
+                <p className="text-slate-400 text-[11px] pt-1 font-sans">
+                  {isSupabaseConnected
+                    ? 'Active connection established with Supabase BaaS. Cloud persistence, RLS policies, and database sync are ready.'
+                    : 'All resume edits, versions, and workspace states persist locally in browser storage without cloud dependencies.'}
                 </p>
               </div>
             </div>
-            <div className="pt-3 border-t border-slate-800 flex justify-end">
+            <div className="pt-3 border-t border-slate-800 flex justify-end space-x-2">
+              {!user?.isGuest && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    logout();
+                    setShowAuthModal(false);
+                  }}
+                  className="px-3 py-1.5 text-xs bg-slate-800 hover:bg-slate-700 text-rose-300 rounded-lg transition-colors font-medium border border-slate-700"
+                >
+                  Sign Out
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => setShowAuthModal(false)}
                 className="px-4 py-1.5 text-xs bg-brand-600 hover:bg-brand-500 text-white rounded-lg transition-colors font-medium"
               >
-                Continue as Guest
+                Continue
               </button>
             </div>
           </div>
