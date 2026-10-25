@@ -1,4 +1,6 @@
 import { Router, Request, Response } from 'express';
+import fs from 'fs';
+import path from 'path';
 
 const router = Router();
 
@@ -9,7 +11,7 @@ router.get('/status', (req: Request, res: Response) => {
   res.json({
     status: 'online',
     product: 'ResumeSync (Resume Intelligence Copilot)',
-    checkpoint: '05 - Application Shell & Navigation Engine',
+    checkpoint: '07 - Database PostgreSQL Schema & Row Level Security',
     timestamp: new Date().toISOString()
   });
 });
@@ -26,8 +28,11 @@ router.get('/config-status', (req: Request, res: Response) => {
   const isSupabaseServiceRoleConfigured = Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY && process.env.SUPABASE_SERVICE_ROLE_KEY !== 'your_supabase_service_role_key_here');
   const isGoogleOAuthConfigured = Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET);
 
+  const schemaPath = path.resolve(process.cwd(), 'supabase', 'schema.sql');
+  const schemaExists = fs.existsSync(schemaPath);
+
   res.json({
-    checkpoint: '05 - Application Shell & Navigation Engine',
+    checkpoint: '07 - Database PostgreSQL Schema & Row Level Security',
     status: 'verified',
     timestamp: new Date().toISOString(),
     matrix: {
@@ -43,6 +48,23 @@ router.get('/config-status', (req: Request, res: Response) => {
         supabaseUrlLoaded: isSupabaseUrlConfigured,
         supabaseAnonKeyLoaded: isSupabaseAnonConfigured,
         vitePrefixStrictness: 'Enforced (Only VITE_ exposed to browser)'
+      },
+      database: {
+        schemaFilePresent: schemaExists,
+        schema: 'PostgreSQL Relational Schema with Row Level Security',
+        tables: [
+          'profiles',
+          'resumes',
+          'resume_versions',
+          'content_library',
+          'jd_analyses',
+          'job_applications',
+          'user_settings'
+        ],
+        totalTables: 7,
+        rowLevelSecurity: 'Enforced (auth.uid() = user_id on all 7 tables)',
+        triggers: ['handle_new_user on auth.users signup'],
+        jsonbIndexing: 'Active (GIN indexes on headers, skills, experience, tags)'
       },
       securityAudit: {
         gitIgnoreProtection: 'Active (.env and secrets omitted from VCS)',

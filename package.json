@@ -9,6 +9,7 @@
     "dev:server": "tsx watch server/index.ts",
     "build": "tsc && vite build",
     "build:server": "tsc -p tsconfig.server.json",
+    "test:db": "tsx server/test-checkpoint-07.ts",
     "preview": "vite preview",
     "start": "tsx server/index.ts"
   },
