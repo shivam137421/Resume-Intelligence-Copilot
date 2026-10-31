@@ -20,10 +20,12 @@ import {
   ExternalLink,
   X,
   FileCheck,
-  ChevronDown
+  ChevronDown,
+  LogOut
 } from 'lucide-react';
 import { WorkspaceTab, ResumeData, ResumeVersion } from '../../types/resume';
 import { useAuth } from '../../context/AuthContext';
+import { AuthModal } from '../auth/AuthModal';
 
 export interface NavbarProps {
   activeTab: WorkspaceTab;
@@ -282,25 +284,57 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <span>Export Document</span>
               </button>
 
-              <button
-                type="button"
-                onClick={() => setShowAuthModal(true)}
-                className="flex items-center space-x-1.5 px-2.5 sm:px-3 py-1.5 text-xs font-medium text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 rounded-lg transition-colors border border-slate-700"
-                title={user?.isGuest ? 'Guest Session (Offline Fallback Engine)' : `Signed in as ${user?.email}`}
-              >
-                <div className="relative flex items-center justify-center">
-                  <User className="w-3.5 h-3.5 text-brand-400" />
-                  <span
-                    className={`absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full ${
-                      isSupabaseConnected ? 'bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.8)]' : 'bg-amber-400'
-                    }`}
-                    title={isSupabaseConnected ? 'Supabase Connected' : 'Offline Fallback Engine'}
-                  />
+              {user && !user.isGuest ? (
+                <div className="flex items-center space-x-2 pl-2 sm:pl-3 border-l border-slate-800">
+                  <div
+                    className="flex items-center space-x-2 px-2.5 py-1.5 rounded-lg bg-slate-800/80 border border-slate-700/80"
+                    title={`Signed in as ${user.email}`}
+                  >
+                    <div className="relative flex items-center justify-center">
+                      <div className="w-5 h-5 rounded-full bg-gradient-to-tr from-brand-600 to-indigo-600 text-white font-bold text-[10px] flex items-center justify-center">
+                        {user.fullName ? user.fullName[0].toUpperCase() : user.email[0].toUpperCase()}
+                      </div>
+                      <span
+                        className={`absolute -bottom-0.5 -right-0.5 w-1.5 h-1.5 rounded-full ring-1 ring-slate-900 ${
+                          isSupabaseConnected ? 'bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.8)]' : 'bg-amber-400'
+                        }`}
+                        title={isSupabaseConnected ? 'Supabase Connected' : 'Offline Fallback Engine'}
+                      />
+                    </div>
+                    <span className="hidden sm:inline-block max-w-[120px] truncate text-xs font-medium text-white">
+                      {user.fullName || user.email}
+                    </span>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => logout()}
+                    className="p-1.5 text-slate-400 hover:text-rose-400 transition-colors rounded-lg hover:bg-slate-800 border border-transparent hover:border-slate-700"
+                    title="Sign Out"
+                    aria-label="Sign Out"
+                  >
+                    <LogOut className="w-4 h-4" />
+                  </button>
                 </div>
-                <span className="hidden sm:inline font-medium">
-                  {user ? (user.isGuest ? 'Guest Workspace' : user.fullName || user.email) : 'Guest Workspace'}
-                </span>
-              </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setShowAuthModal(true)}
+                  className="flex items-center space-x-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-brand-600 hover:bg-brand-500 rounded-lg shadow-sm shadow-brand-500/20 transition-all border border-brand-500/30"
+                  title="Sign in or register for cloud sync"
+                >
+                  <div className="relative flex items-center justify-center">
+                    <User className="w-3.5 h-3.5" />
+                    <span
+                      className={`absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full ${
+                        isSupabaseConnected ? 'bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.8)]' : 'bg-amber-400'
+                      }`}
+                      title={isSupabaseConnected ? 'Supabase Connected' : 'Offline Fallback Engine'}
+                    />
+                  </div>
+                  <span>Sign In</span>
+                </button>
+              )}
             </div>
 
           </div>
@@ -452,88 +486,8 @@ export const Navbar: React.FC<NavbarProps> = ({
         </div>
       )}
 
-      {/* Modal: Auth / Guest Session */}
-      {showAuthModal && (
-        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl animate-in fade-in zoom-in-95">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
-              <h3 className="text-base font-semibold text-white flex items-center gap-2">
-                <User className="w-4 h-4 text-brand-400" />
-                User Authentication & Session
-              </h3>
-              <button
-                onClick={() => setShowAuthModal(false)}
-                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-            <div className="py-4 space-y-3">
-              <div className="p-3 bg-slate-800/80 rounded-xl border border-slate-700 text-xs space-y-2.5">
-                <div className="flex items-center justify-between">
-                  <span className="font-semibold text-white flex items-center gap-1.5">
-                    <span className={`w-2 h-2 rounded-full ${isSupabaseConnected ? 'bg-emerald-400' : 'bg-amber-400'}`} />
-                    {user?.isGuest ? 'Local Guest Workspace' : 'Authenticated Profile'}
-                  </span>
-                  <span
-                    className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${
-                      isSupabaseConnected
-                        ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
-                        : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
-                    }`}
-                  >
-                    {isSupabaseConnected ? 'Supabase Connected' : 'Offline Fallback'}
-                  </span>
-                </div>
-
-                <div className="text-slate-300 space-y-1.5 pt-2 border-t border-slate-700/60 font-mono text-[11px]">
-                  <div className="flex justify-between">
-                    <span className="text-slate-400 font-sans">User:</span>
-                    <span className="text-white">{user?.fullName || 'Alex Vance'}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-400 font-sans">Email:</span>
-                    <span className="text-white">{user?.email || 'alex.vance@example.com'}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-400 font-sans">BaaS Provider:</span>
-                    <span className="text-brand-300">
-                      {isSupabaseConnected ? 'Supabase Cloud (PostgreSQL)' : 'Offline Local Storage'}
-                    </span>
-                  </div>
-                </div>
-
-                <p className="text-slate-400 text-[11px] pt-1 font-sans">
-                  {isSupabaseConnected
-                    ? 'Active connection established with Supabase BaaS. Cloud persistence, RLS policies, and database sync are ready.'
-                    : 'All resume edits, versions, and workspace states persist locally in browser storage without cloud dependencies.'}
-                </p>
-              </div>
-            </div>
-            <div className="pt-3 border-t border-slate-800 flex justify-end space-x-2">
-              {!user?.isGuest && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    logout();
-                    setShowAuthModal(false);
-                  }}
-                  className="px-3 py-1.5 text-xs bg-slate-800 hover:bg-slate-700 text-rose-300 rounded-lg transition-colors font-medium border border-slate-700"
-                >
-                  Sign Out
-                </button>
-              )}
-              <button
-                type="button"
-                onClick={() => setShowAuthModal(false)}
-                className="px-4 py-1.5 text-xs bg-brand-600 hover:bg-brand-500 text-white rounded-lg transition-colors font-medium"
-              >
-                Continue
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Modal: Auth / Registration & Login */}
+      {showAuthModal && <AuthModal onClose={() => setShowAuthModal(false)} />}
     </>
   );
 };

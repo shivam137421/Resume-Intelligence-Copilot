@@ -1248,7 +1248,7 @@ function WorkspaceContent() {
             )}
           </span>
           <span className="text-slate-600">&bull;</span>
-          <span className="text-[11px] text-brand-400 font-medium">Checkpoint 06 Verified</span>
+          <span className="text-[11px] text-brand-400 font-medium">Checkpoint 08 Verified</span>
         </div>
       </footer>
 

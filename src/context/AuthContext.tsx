@@ -9,12 +9,17 @@ export interface UserProfile {
   isGuest?: boolean;
 }
 
+export interface SignupResult {
+  user?: UserProfile | null;
+  requiresEmailConfirmation?: boolean;
+}
+
 export interface AuthContextType {
   user: UserProfile | null;
   loading: boolean;
   isSupabaseConnected: boolean;
   loginWithEmail: (email: string, pass: string) => Promise<void>;
-  signupWithEmail: (email: string, pass: string, fullName: string) => Promise<void>;
+  signupWithEmail: (email: string, pass: string, fullName: string) => Promise<SignupResult>;
   loginWithGoogle: () => Promise<void>;
   logout: () => Promise<void>;
   refreshConnectionStatus?: () => Promise<boolean>;
@@ -22,37 +27,38 @@ export interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-const GUEST_STORAGE_KEY = 'ai_resume_guest_user';
+export const DEFAULT_GUEST_USER: UserProfile = {
+  id: 'guest-user-123',
+  email: 'alex.vance@example.com',
+  fullName: 'Alex Vance',
+  isGuest: true
+};
+
+export const AUTH_STORAGE_KEY = 'ai_resume_auth_session';
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [isSupabaseConnected, setIsSupabaseConnected] = useState<boolean>(isSupabaseConfigured);
 
-  const initGuestUser = () => {
+  /**
+   * Restores a local offline fallback session if present,
+   * otherwise defaults to the guest user session.
+   */
+  const initSessionFromStorage = () => {
     try {
-      const localGuest = localStorage.getItem(GUEST_STORAGE_KEY);
-      if (localGuest) {
-        setUser(JSON.parse(localGuest));
-      } else {
-        const guest: UserProfile = {
-          id: 'guest-user-123',
-          email: 'alex.vance@example.com',
-          fullName: 'Alex Vance',
-          isGuest: true
-        };
-        localStorage.setItem(GUEST_STORAGE_KEY, JSON.stringify(guest));
-        setUser(guest);
+      const savedSession = localStorage.getItem(AUTH_STORAGE_KEY);
+      if (savedSession) {
+        const parsed: UserProfile = JSON.parse(savedSession);
+        if (parsed && parsed.email) {
+          setUser(parsed);
+          return;
+        }
       }
     } catch {
-      // In case localStorage is disabled or restricted
-      setUser({
-        id: 'guest-user-123',
-        email: 'alex.vance@example.com',
-        fullName: 'Alex Vance',
-        isGuest: true
-      });
+      // Local storage disabled or corrupted, proceed to default guest
     }
+    setUser(DEFAULT_GUEST_USER);
   };
 
   useEffect(() => {
@@ -63,45 +69,52 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         .then(({ data: { session }, error }) => {
           if (!isMounted) return;
           if (error) {
-            console.warn('[AuthContext] Supabase session retrieval error, switching to offline fallback mode:', error.message);
+            console.warn('[AuthContext] Supabase session retrieval error, engaging offline fallback:', error.message);
             setIsSupabaseConnected(false);
-            initGuestUser();
+            initSessionFromStorage();
           } else if (session?.user) {
             setUser({
               id: session.user.id,
               email: session.user.email || '',
-              fullName: session.user.user_metadata?.full_name || 'Professional User',
+              fullName: session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || 'Professional User',
               avatarUrl: session.user.user_metadata?.avatar_url,
               isGuest: false
             });
             setIsSupabaseConnected(true);
           } else {
-            // Supabase is configured and connected, but no user is currently authenticated
-            initGuestUser();
+            // Supabase is reachable, but user hasn't logged in with Supabase yet
+            initSessionFromStorage();
             setIsSupabaseConnected(true);
           }
           setLoading(false);
         })
         .catch((err) => {
           if (!isMounted) return;
-          console.warn('[AuthContext] Network unreachable or Supabase error; fallback engine active:', err);
+          console.warn('[AuthContext] Supabase connectivity error, falling back to local session:', err);
           setIsSupabaseConnected(false);
-          initGuestUser();
+          initSessionFromStorage();
           setLoading(false);
         });
 
       const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
         if (!isMounted) return;
         if (session?.user) {
-          setUser({
+          const authUser: UserProfile = {
             id: session.user.id,
             email: session.user.email || '',
-            fullName: session.user.user_metadata?.full_name || 'Professional User',
+            fullName: session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || 'Professional User',
             avatarUrl: session.user.user_metadata?.avatar_url,
             isGuest: false
-          });
+          };
+          setUser(authUser);
+          try {
+            localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(authUser));
+          } catch {
+            // Ignore storage errors
+          }
         } else {
-          initGuestUser();
+          // Auth state returned null (signed out)
+          initSessionFromStorage();
         }
       });
 
@@ -111,67 +124,141 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       };
     } else {
       // Offline / unconfigured fallback mode
-      initGuestUser();
+      initSessionFromStorage();
       setIsSupabaseConnected(false);
       setLoading(false);
     }
   }, []);
 
-  const loginWithEmail = async (email: string, pass: string) => {
+  /**
+   * Log in with Email & Password
+   */
+  const loginWithEmail = async (email: string, pass: string): Promise<void> => {
+    const trimmedEmail = email.trim();
     if (isSupabaseConfigured && supabase) {
-      const { error } = await supabase.auth.signInWithPassword({ email, password: pass });
-      if (error) throw error;
-    } else {
-      // Local offline fallback mode
-      const loggedUser: UserProfile = {
-        id: 'user-local',
-        email,
-        fullName: email.split('@')[0],
-        isGuest: false
-      };
-      setUser(loggedUser);
-      try {
-        localStorage.setItem(GUEST_STORAGE_KEY, JSON.stringify(loggedUser));
-      } catch {
-        // Ignore storage errors
-      }
-    }
-  };
-
-  const signupWithEmail = async (email: string, pass: string, fullName: string) => {
-    if (isSupabaseConfigured && supabase) {
-      const { error } = await supabase.auth.signUp({
-        email,
-        password: pass,
-        options: { data: { full_name: fullName } }
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: trimmedEmail,
+        password: pass
       });
-      if (error) throw error;
+      if (error) {
+        throw new Error(error.message);
+      }
+      if (data.user) {
+        const loggedUser: UserProfile = {
+          id: data.user.id,
+          email: data.user.email || trimmedEmail,
+          fullName: data.user.user_metadata?.full_name || trimmedEmail.split('@')[0],
+          avatarUrl: data.user.user_metadata?.avatar_url,
+          isGuest: false
+        };
+        setUser(loggedUser);
+        try {
+          localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(loggedUser));
+        } catch {
+          // Ignore storage errors
+        }
+      }
     } else {
       // Local offline fallback mode
       const loggedUser: UserProfile = {
-        id: 'user-local',
-        email,
-        fullName,
+        id: `user-local-${Date.now()}`,
+        email: trimmedEmail,
+        fullName: trimmedEmail.split('@')[0],
         isGuest: false
       };
       setUser(loggedUser);
       try {
-        localStorage.setItem(GUEST_STORAGE_KEY, JSON.stringify(loggedUser));
+        localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(loggedUser));
       } catch {
         // Ignore storage errors
       }
     }
   };
 
-  const loginWithGoogle = async () => {
+  /**
+   * Register a new user with Email, Password, and Full Name metadata
+   */
+  const signupWithEmail = async (email: string, pass: string, fullName: string): Promise<SignupResult> => {
+    const trimmedEmail = email.trim();
+    const trimmedName = fullName.trim();
+
     if (isSupabaseConfigured && supabase) {
-      await supabase.auth.signInWithOAuth({ provider: 'google' });
+      const { data, error } = await supabase.auth.signUp({
+        email: trimmedEmail,
+        password: pass,
+        options: {
+          data: {
+            full_name: trimmedName
+          }
+        }
+      });
+      if (error) {
+        throw new Error(error.message);
+      }
+
+      if (data.user) {
+        const authUser: UserProfile = {
+          id: data.user.id,
+          email: data.user.email || trimmedEmail,
+          fullName: data.user.user_metadata?.full_name || trimmedName || trimmedEmail.split('@')[0],
+          avatarUrl: data.user.user_metadata?.avatar_url,
+          isGuest: false
+        };
+
+        // If email confirmation is enabled on Supabase, session is null until confirmed
+        if (!data.session) {
+          return { user: authUser, requiresEmailConfirmation: true };
+        }
+
+        setUser(authUser);
+        try {
+          localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(authUser));
+        } catch {
+          // Ignore storage errors
+        }
+        return { user: authUser, requiresEmailConfirmation: false };
+      }
+
+      return { requiresEmailConfirmation: false };
     } else {
-      alert('Google OAuth requires active Supabase credentials in .env (VITE_SUPABASE_URL & VITE_SUPABASE_ANON_KEY). Please see ANTIGRAVITY_SETUP.md for step-by-step setup.');
+      // Local offline fallback mode
+      const loggedUser: UserProfile = {
+        id: `user-local-${Date.now()}`,
+        email: trimmedEmail,
+        fullName: trimmedName || trimmedEmail.split('@')[0],
+        isGuest: false
+      };
+      setUser(loggedUser);
+      try {
+        localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(loggedUser));
+      } catch {
+        // Ignore storage errors
+      }
+      return { user: loggedUser, requiresEmailConfirmation: false };
     }
   };
 
-  const logout = async () => {
+  /**
+   * Social Authentication (Google OAuth)
+   */
+  const loginWithGoogle = async (): Promise<void> => {
+    if (isSupabaseConfigured && supabase) {
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: window.location.origin
+        }
+      });
+      if (error) throw new Error(error.message);
+    } else {
+      alert('Google OAuth requires active Supabase credentials in .env (VITE_SUPABASE_URL & VITE_SUPABASE_ANON_KEY). Please see ANTIGRAVITY_SETUP.md for setup instructions.');
+    }
+  };
+
+  /**
+   * Log out of current session and restore default guest workspace
+   */
+  const logout = async (): Promise<void> => {
     if (isSupabaseConfigured && supabase) {
       try {
         await supabase.auth.signOut();
@@ -179,9 +266,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         console.warn('[AuthContext] Supabase sign out warning:', err);
       }
     }
-    initGuestUser();
+    try {
+      localStorage.removeItem(AUTH_STORAGE_KEY);
+    } catch {
+      // Ignore storage errors
+    }
+    setUser(DEFAULT_GUEST_USER);
   };
 
+  /**
+   * Connectivity check helper
+   */
   const refreshConnectionStatus = async (): Promise<boolean> => {
     const isConnected = await checkSupabaseConnection();
     setIsSupabaseConnected(isConnected);
