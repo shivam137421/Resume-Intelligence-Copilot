@@ -291,9 +291,17 @@ export const Navbar: React.FC<NavbarProps> = ({
                     title={`Signed in as ${user.email}`}
                   >
                     <div className="relative flex items-center justify-center">
-                      <div className="w-5 h-5 rounded-full bg-gradient-to-tr from-brand-600 to-indigo-600 text-white font-bold text-[10px] flex items-center justify-center">
-                        {user.fullName ? user.fullName[0].toUpperCase() : user.email[0].toUpperCase()}
-                      </div>
+                      {user.avatarUrl ? (
+                        <img
+                          src={user.avatarUrl}
+                          alt={user.fullName || user.email}
+                          className="w-5 h-5 rounded-full object-cover ring-1 ring-slate-700"
+                        />
+                      ) : (
+                        <div className="w-5 h-5 rounded-full bg-gradient-to-tr from-brand-600 to-indigo-600 text-white font-bold text-[10px] flex items-center justify-center">
+                          {user.fullName ? user.fullName[0].toUpperCase() : user.email[0].toUpperCase()}
+                        </div>
+                      )}
                       <span
                         className={`absolute -bottom-0.5 -right-0.5 w-1.5 h-1.5 rounded-full ring-1 ring-slate-900 ${
                           isSupabaseConnected ? 'bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.8)]' : 'bg-amber-400'

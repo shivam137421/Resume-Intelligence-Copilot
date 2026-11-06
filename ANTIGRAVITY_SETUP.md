@@ -45,9 +45,61 @@ The project uses `.env` for local configuration. A clean `.env.example` is provi
    - **Row Level Security (RLS)** policies ensuring users can only read and write their own data.
 
 ### Step 3: Configure Authentication Providers
-1. In Supabase Dashboard, go to **Authentication -> Providers**.
-2. **Email**: Ensure Email provider is enabled. (Optionally disable "Confirm Email" for instant development testing).
-3. **Google OAuth (Optional)**: Enable Google provider and paste your `Client ID` and `Client Secret` obtained from Google Cloud Console. Set Authorized Redirect URI to `https://<your-supabase-project>.supabase.co/auth/v1/callback`.
+
+#### A. Email Authentication
+1. In Supabase Dashboard, navigate to **Authentication -> Providers -> Email**.
+2. Ensure the Email provider is enabled.
+3. For local development, you may optionally toggle "Confirm email" off to allow instant sign-in without waiting for email verification links.
+
+#### B. Google OAuth 2.0 Social Authentication Integration
+ResumeSync supports one-click Google OAuth authentication powered by Supabase Auth and Google Cloud Platform OAuth 2.0.
+
+1. **Create Google Cloud Credentials**:
+   - Go to the [Google Cloud Console](https://console.cloud.google.com/).
+   - Create a new project (e.g., `resumesync-copilot`) or select an existing project.
+   - Go to **APIs & Services -> OAuth consent screen**:
+     - User Type: **External** -> Click **Create**.
+     - App Information: Enter App name (`ResumeSync Copilot`) and User support email.
+     - Developer contact information: Enter your email address.
+     - Scopes: Add `.../auth/userinfo.email` and `.../auth/userinfo.profile`.
+     - Save and continue through the remaining steps.
+   - Go to **APIs & Services -> Credentials**:
+     - Click **+ CREATE CREDENTIALS** -> Select **OAuth client ID**.
+     - Application type: **Web application**.
+     - Name: `ResumeSync Web Client`.
+     - **Authorized JavaScript origins**:
+       - `http://localhost:5173`
+       - `http://localhost:3001`
+       - *(Production)*: `https://your-production-domain.vercel.app`
+     - **Authorized redirect URIs**:
+       - `https://<your-supabase-project-ref>.supabase.co/auth/v1/callback`
+       *(Copy your exact Supabase project reference from the Supabase Dashboard URL)*
+     - Click **Create**.
+     - Note down the generated **Client ID** and **Client Secret**.
+
+2. **Configure Provider in Supabase**:
+   - In the Supabase Dashboard, go to **Authentication -> Providers -> Google**.
+   - Toggle **Enable Google provider** to ON.
+   - Enter your **Client ID** from Google Cloud Console.
+   - Enter your **Client Secret** from Google Cloud Console.
+   - Under **Authorized Client IDs** (optional), ensure your Client ID is listed.
+   - Click **Save**.
+
+3. **Configure URL Redirect Rules in Supabase**:
+   - Go to **Authentication -> URL Configuration**.
+   - Set **Site URL** to: `http://localhost:5173` (or your production URL).
+   - In **Redirect URLs**, add:
+     - `http://localhost:5173`
+     - `http://localhost:5173/**`
+     - `https://your-production-domain.vercel.app/**`
+   - Click **Save**.
+
+4. **Frontend OAuth Flow & Zero-Secret Security Matrix**:
+   - When the user clicks **Continue with Google**, the client calls `supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: window.location.origin } })`.
+   - The browser redirects to Google's consent screen and returns to Supabase's secure callback endpoint (`https://<project-ref>.supabase.co/auth/v1/callback`).
+   - Supabase completes the OAuth 2.0 PKCE code exchange and redirects back to ResumeSync with session credentials.
+   - The application parses redirect parameters, extracts Google user profile metadata (`full_name`, `email`, and `picture` / `avatar_url`), updates local session persistence (`ai_resume_auth_session`), and sanitizes the browser URL bar using `history.replaceState`.
+   - **Zero Secret Exposure**: The `GOOGLE_CLIENT_SECRET` is stored strictly within Supabase Cloud backend and Google Cloud Console. It is **never** embedded in client-side code, `.env` client variables, or git-tracked files.
 
 ---
 
