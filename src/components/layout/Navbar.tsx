@@ -23,9 +23,10 @@ import {
   ChevronDown,
   LogOut
 } from 'lucide-react';
-import { WorkspaceTab, ResumeData, ResumeVersion } from '../../types/resume';
+import { WorkspaceTab, ResumeData, ResumeVersion, HeaderData } from '../../types/resume';
 import { useAuth } from '../../context/AuthContext';
 import { AuthModal } from '../auth/AuthModal';
+import { ProfileSettingsModal } from '../profile/ProfileSettingsModal';
 
 export interface NavbarProps {
   activeTab: WorkspaceTab;
@@ -39,6 +40,7 @@ export interface NavbarProps {
   diffBadge?: number;
   healthBadge?: number;
   onSimulateAutosave?: () => void;
+  onUpdateHeader?: (fields: Partial<HeaderData>) => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -52,7 +54,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   scoreBadge = '87%',
   diffBadge = 3,
   healthBadge = 2,
-  onSimulateAutosave
+  onSimulateAutosave,
+  onUpdateHeader
 }) => {
   const { user, isSupabaseConnected, logout } = useAuth();
   const [showVersionMenu, setShowVersionMenu] = useState(false);
@@ -287,8 +290,9 @@ export const Navbar: React.FC<NavbarProps> = ({
               {user && !user.isGuest ? (
                 <div className="flex items-center space-x-2 pl-2 sm:pl-3 border-l border-slate-800">
                   <div
-                    className="flex items-center space-x-2 px-2.5 py-1.5 rounded-lg bg-slate-800/80 border border-slate-700/80"
-                    title={`Signed in as ${user.email}`}
+                    onClick={() => setShowProfileModal(true)}
+                    className="flex items-center space-x-2 px-2.5 py-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-750 border border-slate-700/80 hover:border-slate-600 transition-all cursor-pointer"
+                    title={`Signed in as ${user.email} — Click to manage profile & settings`}
                   >
                     <div className="relative flex items-center justify-center">
                       {user.avatarUrl ? (
@@ -457,41 +461,13 @@ export const Navbar: React.FC<NavbarProps> = ({
         </div>
       )}
 
-      {/* Modal: Import Profile */}
+      {/* Modal: Profile & Workspace Settings */}
       {showProfileModal && (
-        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl animate-in fade-in zoom-in-95">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
-              <h3 className="text-base font-semibold text-white flex items-center gap-2">
-                <Globe className="w-4 h-4 text-brand-400" />
-                Profile Import & Sync
-              </h3>
-              <button
-                onClick={() => setShowProfileModal(false)}
-                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-            <div className="py-4 space-y-3">
-              <p className="text-xs text-slate-300">
-                You can import your public LinkedIn, GitHub, or JSON profile to automatically populate the active resume.
-              </p>
-              <div className="p-3 bg-brand-500/10 border border-brand-500/30 rounded-xl text-xs text-brand-200">
-                Active Resume: <strong className="text-white">{resume.header.fullName}</strong> ({resume.title})
-              </div>
-            </div>
-            <div className="pt-3 border-t border-slate-800 flex justify-end">
-              <button
-                type="button"
-                onClick={() => setShowProfileModal(false)}
-                className="px-4 py-1.5 text-xs bg-brand-600 hover:bg-brand-500 text-white rounded-lg transition-colors font-medium"
-              >
-                Done
-              </button>
-            </div>
-          </div>
-        </div>
+        <ProfileSettingsModal
+          onClose={() => setShowProfileModal(false)}
+          onSyncResumeHeader={onUpdateHeader}
+          activeResumeTitle={resume.title}
+        />
       )}
 
       {/* Modal: Auth / Registration & Login */}

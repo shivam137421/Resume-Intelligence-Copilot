@@ -12,6 +12,7 @@
     "test:db": "tsx server/test-checkpoint-07.ts",
     "test:auth": "tsx server/test-checkpoint-08.ts",
     "test:oauth": "tsx server/test-checkpoint-09.ts",
+    "test:profile": "tsx server/test-checkpoint-10.ts",
     "preview": "vite preview",
     "start": "tsx server/index.ts"
   },

@@ -157,12 +157,55 @@ CREATE INDEX IF NOT EXISTS idx_jd_analyses_extracted ON public.jd_analyses USING
 -- TRIGGERS & AUTOMATION
 -- ===================================================
 
--- Trigger to automatically create profile on user signup
+-- Trigger to automatically create profile and initial workspace settings on user signup
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER AS $$
 BEGIN
-  INSERT INTO public.profiles (id, email, full_name)
-  VALUES (new.id, new.email, new.raw_user_meta_data->>'full_name');
+  -- 1. Create or enrich user profile record
+  INSERT INTO public.profiles (
+    id,
+    email,
+    full_name,
+    avatar_url,
+    headline,
+    phone,
+    location,
+    github_username,
+    linkedin_url
+  )
+  VALUES (
+    new.id,
+    new.email,
+    COALESCE(new.raw_user_meta_data->>'full_name', new.raw_user_meta_data->>'name', split_part(new.email, '@', 1)),
+    COALESCE(new.raw_user_meta_data->>'avatar_url', new.raw_user_meta_data->>'picture'),
+    new.raw_user_meta_data->>'headline',
+    new.raw_user_meta_data->>'phone',
+    new.raw_user_meta_data->>'location',
+    new.raw_user_meta_data->>'github_username',
+    new.raw_user_meta_data->>'linkedin_url'
+  )
+  ON CONFLICT (id) DO UPDATE SET
+    full_name = COALESCE(EXCLUDED.full_name, public.profiles.full_name),
+    avatar_url = COALESCE(EXCLUDED.avatar_url, public.profiles.avatar_url),
+    updated_at = NOW();
+
+  -- 2. Initialize default workspace settings for the new user
+  INSERT INTO public.user_settings (
+    user_id,
+    default_template,
+    ai_model_preference,
+    auto_save_enabled,
+    export_page_limit
+  )
+  VALUES (
+    new.id,
+    'ats-minimal',
+    'gemini-2.5-flash',
+    TRUE,
+    1
+  )
+  ON CONFLICT (user_id) DO NOTHING;
+
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;

@@ -1,12 +1,48 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { supabase, isSupabaseConfigured, checkSupabaseConnection } from '../services/supabaseClient';
+import { ResumeTemplateId } from '../types/resume';
 
 export interface UserProfile {
   id: string;
   email: string;
   fullName?: string;
+  headline?: string;
+  phone?: string;
+  location?: string;
   avatarUrl?: string;
+  githubUsername?: string;
+  linkedinUrl?: string;
   isGuest?: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface WorkspaceSettings {
+  userId: string;
+  defaultTemplate: ResumeTemplateId;
+  aiModelPreference: string;
+  autoSaveEnabled: boolean;
+  exportPageLimit: number;
+  themePreference?: 'dark' | 'light' | 'system';
+  updatedAt?: string;
+}
+
+export interface ProfileUpdatePayload {
+  fullName?: string;
+  headline?: string;
+  phone?: string;
+  location?: string;
+  avatarUrl?: string;
+  githubUsername?: string;
+  linkedinUrl?: string;
+}
+
+export interface SettingsUpdatePayload {
+  defaultTemplate?: ResumeTemplateId;
+  aiModelPreference?: string;
+  autoSaveEnabled?: boolean;
+  exportPageLimit?: number;
+  themePreference?: 'dark' | 'light' | 'system';
 }
 
 export interface SignupResult {
@@ -16,6 +52,7 @@ export interface SignupResult {
 
 export interface AuthContextType {
   user: UserProfile | null;
+  settings: WorkspaceSettings;
   loading: boolean;
   isOAuthLoading?: boolean;
   oauthError?: string | null;
@@ -25,6 +62,9 @@ export interface AuthContextType {
   signupWithEmail: (email: string, pass: string, fullName: string) => Promise<SignupResult>;
   loginWithGoogle: () => Promise<void>;
   logout: () => Promise<void>;
+  updateProfile: (updates: ProfileUpdatePayload) => Promise<void>;
+  updateSettings: (updates: SettingsUpdatePayload) => Promise<void>;
+  refreshProfile: () => Promise<void>;
   refreshConnectionStatus?: () => Promise<boolean>;
 }
 
@@ -34,32 +74,63 @@ export const DEFAULT_GUEST_USER: UserProfile = {
   id: 'guest-user-123',
   email: 'alex.vance@example.com',
   fullName: 'Alex Vance',
+  headline: 'Senior Full Stack & AI Systems Engineer',
+  phone: '+1 (555) 234-5678',
+  location: 'San Francisco, CA',
+  githubUsername: 'alexvance-dev',
+  linkedinUrl: 'https://linkedin.com/in/alexvance',
   isGuest: true
 };
 
+export const DEFAULT_WORKSPACE_SETTINGS: WorkspaceSettings = {
+  userId: 'guest-user-123',
+  defaultTemplate: 'ats-minimal',
+  aiModelPreference: 'gemini-2.5-flash',
+  autoSaveEnabled: true,
+  exportPageLimit: 1,
+  themePreference: 'dark'
+};
+
 export const AUTH_STORAGE_KEY = 'ai_resume_auth_session';
+export const WORKSPACE_SETTINGS_STORAGE_KEY = 'ai_resume_workspace_settings';
+export const USER_PROFILE_STORAGE_KEY = 'ai_resume_user_profile';
 
 /**
- * Maps Supabase Auth user or OAuth payload into standard UserProfile domain object.
- * Robustly extracts name and avatar attributes from user metadata (handling full_name, name, avatar_url, and picture).
+ * Maps Supabase Auth user or OAuth payload and optional PostgreSQL profiles row into standard UserProfile domain object.
+ * Robustly extracts name, avatar, contact attributes from user metadata (handling full_name, name, avatar_url, and picture)
+ * and enriches them with database profile fields.
  */
-export const mapSupabaseUser = (authUser: any): UserProfile => {
+export const mapSupabaseUser = (authUser: any, dbProfile?: any): UserProfile => {
   const meta = authUser?.user_metadata || {};
-  const email = authUser?.email || '';
-  const fullName = meta.full_name || meta.name || email.split('@')[0] || 'Professional User';
-  const avatarUrl = meta.avatar_url || meta.picture || undefined;
+  const email = authUser?.email || dbProfile?.email || '';
+  const fullName =
+    dbProfile?.full_name || meta.full_name || meta.name || email.split('@')[0] || 'Professional User';
+  const avatarUrl = dbProfile?.avatar_url || meta.avatar_url || meta.picture || undefined;
+  const headline = dbProfile?.headline || meta.headline || undefined;
+  const phone = dbProfile?.phone || meta.phone || undefined;
+  const location = dbProfile?.location || meta.location || undefined;
+  const githubUsername = dbProfile?.github_username || meta.github_username || undefined;
+  const linkedinUrl = dbProfile?.linkedin_url || meta.linkedin_url || undefined;
 
   return {
-    id: authUser?.id || `user-${Date.now()}`,
+    id: authUser?.id || dbProfile?.id || `user-${Date.now()}`,
     email,
     fullName,
+    headline,
+    phone,
+    location,
     avatarUrl,
-    isGuest: false
+    githubUsername,
+    linkedinUrl,
+    isGuest: false,
+    createdAt: dbProfile?.created_at || authUser?.created_at,
+    updatedAt: dbProfile?.updated_at || authUser?.updated_at
   };
 };
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<UserProfile | null>(null);
+  const [settings, setSettings] = useState<WorkspaceSettings>(DEFAULT_WORKSPACE_SETTINGS);
   const [loading, setLoading] = useState<boolean>(true);
   const [isOAuthLoading, setIsOAuthLoading] = useState<boolean>(false);
   const [oauthError, setOauthError] = useState<string | null>(null);
@@ -69,7 +140,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   /**
    * Restores a local offline fallback session if present,
-   * otherwise defaults to the guest user session.
+   * otherwise defaults to the guest user session and default workspace settings.
    */
   const initSessionFromStorage = () => {
     try {
@@ -78,13 +149,112 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const parsed: UserProfile = JSON.parse(savedSession);
         if (parsed && parsed.email) {
           setUser(parsed);
+        } else {
+          setUser(DEFAULT_GUEST_USER);
+        }
+      } else {
+        setUser(DEFAULT_GUEST_USER);
+      }
+    } catch {
+      setUser(DEFAULT_GUEST_USER);
+    }
+
+    try {
+      const savedSettings = localStorage.getItem(WORKSPACE_SETTINGS_STORAGE_KEY);
+      if (savedSettings) {
+        const parsedSettings: WorkspaceSettings = JSON.parse(savedSettings);
+        if (parsedSettings && parsedSettings.defaultTemplate) {
+          setSettings(parsedSettings);
           return;
         }
       }
-    } catch {
-      // Local storage disabled or corrupted, proceed to default guest
+    } catch {}
+    setSettings(DEFAULT_WORKSPACE_SETTINGS);
+  };
+
+  /**
+   * Synchronizes user profile and workspace settings from Supabase database tables ('profiles' and 'user_settings').
+   * If records do not yet exist, initializes them with defaults or session metadata.
+   */
+  const syncProfileAndSettingsFromDb = async (userId: string, currentAuthUser?: any) => {
+    if (!isSupabaseConfigured || !supabase) return;
+
+    try {
+      // 1. Fetch Profile row from 'profiles' table
+      const { data: profileData, error: profileErr } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', userId)
+        .maybeSingle();
+
+      if (profileErr) {
+        console.warn('[AuthContext] Error retrieving profile row from database:', profileErr.message);
+      } else if (profileData) {
+        const enrichedUser = mapSupabaseUser(
+          currentAuthUser || { id: userId, email: profileData.email },
+          profileData
+        );
+        setUser(enrichedUser);
+        try {
+          localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(enrichedUser));
+          localStorage.setItem(USER_PROFILE_STORAGE_KEY, JSON.stringify(enrichedUser));
+        } catch {}
+      } else if (currentAuthUser) {
+        // Upsert matching profile record if not yet created by trigger
+        const initialProfile = mapSupabaseUser(currentAuthUser);
+        await supabase.from('profiles').upsert({
+          id: userId,
+          email: initialProfile.email,
+          full_name: initialProfile.fullName,
+          avatar_url: initialProfile.avatarUrl,
+          headline: initialProfile.headline,
+          phone: initialProfile.phone,
+          location: initialProfile.location,
+          github_username: initialProfile.githubUsername,
+          linkedin_url: initialProfile.linkedinUrl,
+          updated_at: new Date().toISOString()
+        });
+      }
+
+      // 2. Fetch Settings row from 'user_settings' table
+      const { data: settingsData, error: settingsErr } = await supabase
+        .from('user_settings')
+        .select('*')
+        .eq('user_id', userId)
+        .maybeSingle();
+
+      if (settingsErr) {
+        console.warn('[AuthContext] Error retrieving user_settings row from database:', settingsErr.message);
+      } else if (settingsData) {
+        const loadedSettings: WorkspaceSettings = {
+          userId: settingsData.user_id,
+          defaultTemplate: (settingsData.default_template as ResumeTemplateId) || 'ats-minimal',
+          aiModelPreference: settingsData.ai_model_preference || 'gemini-2.5-flash',
+          autoSaveEnabled: settingsData.auto_save_enabled !== undefined ? settingsData.auto_save_enabled : true,
+          exportPageLimit: settingsData.export_page_limit || 1,
+          themePreference: 'dark',
+          updatedAt: settingsData.updated_at
+        };
+        setSettings(loadedSettings);
+        try {
+          localStorage.setItem(WORKSPACE_SETTINGS_STORAGE_KEY, JSON.stringify(loadedSettings));
+        } catch {}
+      } else {
+        // Initialize default user settings in table
+        const initialSettings = { ...DEFAULT_WORKSPACE_SETTINGS, userId };
+        await supabase.from('user_settings').upsert({
+          user_id: userId,
+          default_template: initialSettings.defaultTemplate,
+          ai_model_preference: initialSettings.aiModelPreference,
+          auto_save_enabled: initialSettings.autoSaveEnabled,
+          export_page_limit: initialSettings.exportPageLimit,
+          updated_at: new Date().toISOString()
+        });
+        setSettings(initialSettings);
+      }
+    } catch (err) {
+      console.warn('[AuthContext] Profile & settings synchronization exception:', err);
     }
-    setUser(DEFAULT_GUEST_USER);
   };
 
   useEffect(() => {
@@ -121,7 +291,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     if (isSupabaseConfigured && supabase) {
       supabase.auth.getSession()
-        .then(({ data: { session }, error }) => {
+        .then(async ({ data: { session }, error }) => {
           if (!isMounted) return;
           if (error) {
             console.warn('[AuthContext] Supabase session retrieval error, engaging offline fallback:', error.message);
@@ -136,6 +306,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             } catch {
               // Ignore storage errors
             }
+
+            // Sync enriched profile and settings from database tables
+            await syncProfileAndSettingsFromDb(session.user.id, session.user);
 
             // If returned from OAuth redirect (code or hash in URL), sanitize URL bar cleanly
             if (
@@ -162,7 +335,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           setLoading(false);
         });
 
-      const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
         if (!isMounted) return;
         if (session?.user) {
           const authUser = mapSupabaseUser(session.user);
@@ -173,6 +346,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           } catch {
             // Ignore storage errors
           }
+
+          // Sync database profile and workspace settings
+          await syncProfileAndSettingsFromDb(session.user.id, session.user);
 
           // Clean up OAuth tokens / code from URL query and hash
           if (
@@ -223,6 +399,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         } catch {
           // Ignore storage errors
         }
+        await syncProfileAndSettingsFromDb(data.user.id, data.user);
       }
     } else {
       // Local offline fallback mode
@@ -230,6 +407,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         id: `user-local-${Date.now()}`,
         email: trimmedEmail,
         fullName: trimmedEmail.split('@')[0],
+        headline: 'Professional User',
         isGuest: false
       };
       setUser(loggedUser);
@@ -276,6 +454,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         } catch {
           // Ignore storage errors
         }
+
+        await syncProfileAndSettingsFromDb(data.user.id, data.user);
         return { user: authUser, requiresEmailConfirmation: false };
       }
 
@@ -286,6 +466,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         id: `user-local-${Date.now()}`,
         email: trimmedEmail,
         fullName: trimmedName || trimmedEmail.split('@')[0],
+        headline: 'Professional User',
         isGuest: false
       };
       setUser(loggedUser);
@@ -335,6 +516,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         id: `google-user-${Date.now()}`,
         email: 'alex.vance@gmail.com',
         fullName: 'Alex Vance (Google)',
+        headline: 'Staff AI Systems Architect',
+        phone: '+1 (555) 987-6543',
+        location: 'Mountain View, CA',
+        githubUsername: 'alexvance',
+        linkedinUrl: 'https://linkedin.com/in/alexvance',
         avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=256',
         isGuest: false
       };
@@ -360,10 +546,107 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
     try {
       localStorage.removeItem(AUTH_STORAGE_KEY);
+      localStorage.removeItem(USER_PROFILE_STORAGE_KEY);
+      localStorage.removeItem(WORKSPACE_SETTINGS_STORAGE_KEY);
     } catch {
       // Ignore storage errors
     }
     setUser(DEFAULT_GUEST_USER);
+    setSettings(DEFAULT_WORKSPACE_SETTINGS);
+  };
+
+  /**
+   * Update User Profile details
+   * Optimistically updates state, persists to localStorage, and synchronizes to Supabase 'profiles' table.
+   */
+  const updateProfile = async (updates: ProfileUpdatePayload): Promise<void> => {
+    if (!user) return;
+
+    const updatedUser: UserProfile = {
+      ...user,
+      ...updates,
+      updatedAt: new Date().toISOString()
+    };
+
+    // Optimistic UI state update
+    setUser(updatedUser);
+
+    // Persist to local caches
+    try {
+      localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(updatedUser));
+      localStorage.setItem(USER_PROFILE_STORAGE_KEY, JSON.stringify(updatedUser));
+    } catch (err) {
+      console.warn('[AuthContext] LocalStorage profile write warning:', err);
+    }
+
+    // Upsert to Supabase 'profiles' table if connected and non-guest
+    if (isSupabaseConfigured && supabase && !user.isGuest) {
+      const { error } = await supabase.from('profiles').upsert({
+        id: user.id,
+        email: user.email,
+        full_name: updatedUser.fullName,
+        headline: updatedUser.headline,
+        phone: updatedUser.phone,
+        location: updatedUser.location,
+        avatar_url: updatedUser.avatarUrl,
+        github_username: updatedUser.githubUsername,
+        linkedin_url: updatedUser.linkedinUrl,
+        updated_at: new Date().toISOString()
+      });
+
+      if (error) {
+        console.error('[AuthContext] Error synchronizing profile to database:', error.message);
+        throw new Error(error.message);
+      }
+    }
+  };
+
+  /**
+   * Update Workspace Settings preferences
+   * Optimistically updates settings state, persists to localStorage, and synchronizes to Supabase 'user_settings' table.
+   */
+  const updateSettings = async (updates: SettingsUpdatePayload): Promise<void> => {
+    const updatedSettings: WorkspaceSettings = {
+      ...settings,
+      ...updates,
+      updatedAt: new Date().toISOString()
+    };
+
+    // Optimistic UI state update
+    setSettings(updatedSettings);
+
+    // Persist to local cache
+    try {
+      localStorage.setItem(WORKSPACE_SETTINGS_STORAGE_KEY, JSON.stringify(updatedSettings));
+    } catch (err) {
+      console.warn('[AuthContext] LocalStorage settings write warning:', err);
+    }
+
+    // Upsert to Supabase 'user_settings' table if connected and non-guest
+    if (isSupabaseConfigured && supabase && user && !user.isGuest) {
+      const { error } = await supabase.from('user_settings').upsert({
+        user_id: user.id,
+        default_template: updatedSettings.defaultTemplate,
+        ai_model_preference: updatedSettings.aiModelPreference,
+        auto_save_enabled: updatedSettings.autoSaveEnabled,
+        export_page_limit: updatedSettings.exportPageLimit,
+        updated_at: new Date().toISOString()
+      });
+
+      if (error) {
+        console.error('[AuthContext] Error synchronizing settings to database:', error.message);
+        throw new Error(error.message);
+      }
+    }
+  };
+
+  /**
+   * Refreshes user profile and workspace settings from database
+   */
+  const refreshProfile = async (): Promise<void> => {
+    if (user?.id) {
+      await syncProfileAndSettingsFromDb(user.id, user);
+    }
   };
 
   /**
@@ -379,6 +662,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     <AuthContext.Provider
       value={{
         user,
+        settings,
         loading,
         isOAuthLoading,
         oauthError,
@@ -388,6 +672,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         signupWithEmail,
         loginWithGoogle,
         logout,
+        updateProfile,
+        updateSettings,
+        refreshProfile,
         refreshConnectionStatus
       }}
     >

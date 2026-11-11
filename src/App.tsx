@@ -227,6 +227,17 @@ function WorkspaceContent() {
         diffBadge={unappliedDiffsCount || undefined}
         healthBadge={2}
         onSimulateAutosave={triggerAutosaveFeedback}
+        onUpdateHeader={(fields) => {
+          setResume((prev) => ({
+            ...prev,
+            header: {
+              ...prev.header,
+              ...fields
+            },
+            updatedAt: new Date().toISOString()
+          }));
+          triggerAutosaveFeedback();
+        }}
       />
 
       {/* Main Workspace Dynamic View Router (Zero Refresh) */}

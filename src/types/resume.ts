@@ -240,3 +240,48 @@ export type WorkspaceTab =
   | 'health-check'
   | 'content-library';
 
+export type ResumeTemplateId = 'ats-minimal' | 'modern-engineering' | 'executive' | 'one-page-clean';
+
+export interface UserProfile {
+  id: string;
+  email: string;
+  fullName?: string;
+  headline?: string;
+  phone?: string;
+  location?: string;
+  avatarUrl?: string;
+  githubUsername?: string;
+  linkedinUrl?: string;
+  isGuest?: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface WorkspaceSettings {
+  userId: string;
+  defaultTemplate: ResumeTemplateId;
+  aiModelPreference: string;
+  autoSaveEnabled: boolean;
+  exportPageLimit: number;
+  themePreference?: 'dark' | 'light' | 'system';
+  updatedAt?: string;
+}
+
+export interface ProfileUpdatePayload {
+  fullName?: string;
+  headline?: string;
+  phone?: string;
+  location?: string;
+  avatarUrl?: string;
+  githubUsername?: string;
+  linkedinUrl?: string;
+}
+
+export interface SettingsUpdatePayload {
+  defaultTemplate?: ResumeTemplateId;
+  aiModelPreference?: string;
+  autoSaveEnabled?: boolean;
+  exportPageLimit?: number;
+  themePreference?: 'dark' | 'light' | 'system';
+}
+
