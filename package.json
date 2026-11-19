@@ -13,6 +13,7 @@
     "test:auth": "tsx server/test-checkpoint-08.ts",
     "test:oauth": "tsx server/test-checkpoint-09.ts",
     "test:profile": "tsx server/test-checkpoint-10.ts",
+    "test:dashboard": "tsx server/test-checkpoint-11.ts",
     "preview": "vite preview",
     "start": "tsx server/index.ts"
   },

@@ -32,6 +32,7 @@ import {
   Info
 } from 'lucide-react';
 import { Navbar } from './components/layout/Navbar';
+import { Dashboard } from './components/dashboard/Dashboard';
 import { WorkspaceTab, ResumeData, ResumeVersion } from './types/resume';
 import {
   createInitialResume,
@@ -247,247 +248,19 @@ function WorkspaceContent() {
         {/* TAB 1: DASHBOARD VIEW                                     */}
         {/* ========================================================= */}
         {activeTab === 'dashboard' && (
-          <div className="space-y-6 animate-in fade-in duration-150">
-            {/* Hero / Header greeting */}
-            <div className="flex flex-col md:flex-row md:items-center justify-between pb-4 border-b border-slate-800 gap-4">
-              <div>
-                <div className="flex items-center space-x-2">
-                  <h1 className="text-2xl font-bold tracking-tight text-white">
-                    Resume Intelligence Hub
-                  </h1>
-                  <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                    Checkpoint 06 Active
-                  </span>
-                  <span
-                    className={`text-xs font-semibold px-2.5 py-0.5 rounded-full border flex items-center gap-1.5 ${
-                      isSupabaseConnected
-                        ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
-                        : 'bg-amber-500/10 text-amber-400 border-amber-500/20'
-                    }`}
-                  >
-                    <span
-                      className={`w-1.5 h-1.5 rounded-full ${
-                        isSupabaseConnected ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'
-                      }`}
-                    />
-                    {isSupabaseConnected ? 'Supabase Cloud' : 'Offline Fallback Active'}
-                  </span>
-                </div>
-                <p className="text-xs text-slate-400 mt-1">
-                  Active Document:{' '}
-                  <span className="text-slate-200 font-semibold">{resume.title}</span> — Candidate:{' '}
-                  <span className="text-brand-400 font-semibold">{resume.header.fullName}</span>
-                </p>
-              </div>
-
-              {/* Quick Action Buttons */}
-              <div className="flex items-center space-x-2">
-                <button
-                  type="button"
-                  onClick={() => setActiveTab('editor')}
-                  className="flex items-center space-x-1.5 px-3.5 py-2 bg-brand-600 hover:bg-brand-500 text-white text-xs font-semibold rounded-lg shadow-md shadow-brand-500/20 transition-all"
-                >
-                  <Edit3 className="w-3.5 h-3.5" />
-                  <span>Open Visual Editor</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setActiveTab('preview')}
-                  className="flex items-center space-x-1.5 px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold rounded-lg border border-slate-700 transition-all"
-                >
-                  <Eye className="w-3.5 h-3.5 text-brand-400" />
-                  <span>Live Preview</span>
-                </button>
-              </div>
-            </div>
-
-            {/* Quick Metrics KPI Grid */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <div
-                onClick={() => setActiveTab('jd-intelligence')}
-                className="p-4 rounded-xl bg-slate-900 border border-slate-800 hover:border-brand-500/40 cursor-pointer transition-all hover:bg-slate-850 group"
-              >
-                <div className="flex items-center justify-between text-slate-400 mb-2">
-                  <span className="text-xs font-medium">ATS Match Score</span>
-                  <Target className="w-4 h-4 text-emerald-400 group-hover:scale-110 transition-transform" />
-                </div>
-                <div className="text-2xl font-bold text-emerald-400">87%</div>
-                <div className="text-[11px] text-slate-400 mt-1 flex items-center gap-1">
-                  <span>Google Senior Staff Target</span>
-                  <ArrowRight className="w-3 h-3 text-slate-500 group-hover:translate-x-1 transition-transform" />
-                </div>
-              </div>
-
-              <div
-                onClick={() => setActiveTab('health-check')}
-                className="p-4 rounded-xl bg-slate-900 border border-slate-800 hover:border-brand-500/40 cursor-pointer transition-all hover:bg-slate-850 group"
-              >
-                <div className="flex items-center justify-between text-slate-400 mb-2">
-                  <span className="text-xs font-medium">Resume Health</span>
-                  <Stethoscope className="w-4 h-4 text-cyan-400 group-hover:scale-110 transition-transform" />
-                </div>
-                <div className="text-2xl font-bold text-cyan-400">96 / 100</div>
-                <div className="text-[11px] text-slate-400 mt-1 flex items-center gap-1">
-                  <span>2 non-blocking warnings</span>
-                  <ArrowRight className="w-3 h-3 text-slate-500 group-hover:translate-x-1 transition-transform" />
-                </div>
-              </div>
-
-              <div
-                onClick={() => setActiveTab('diff')}
-                className="p-4 rounded-xl bg-slate-900 border border-slate-800 hover:border-brand-500/40 cursor-pointer transition-all hover:bg-slate-850 group"
-              >
-                <div className="flex items-center justify-between text-slate-400 mb-2">
-                  <span className="text-xs font-medium">AI Copilot Diff</span>
-                  <GitCompare className="w-4 h-4 text-amber-400 group-hover:scale-110 transition-transform" />
-                </div>
-                <div className="text-2xl font-bold text-amber-400">
-                  {unappliedDiffsCount} Pending
-                </div>
-                <div className="text-[11px] text-slate-400 mt-1 flex items-center gap-1">
-                  <span>Suggested metric improvements</span>
-                  <ArrowRight className="w-3 h-3 text-slate-500 group-hover:translate-x-1 transition-transform" />
-                </div>
-              </div>
-
-              <div className="p-4 rounded-xl bg-slate-900 border border-slate-800">
-                <div className="flex items-center justify-between text-slate-400 mb-2">
-                  <span className="text-xs font-medium">Saved Versions</span>
-                  <Layers className="w-3 h-3 text-brand-400" />
-                </div>
-                <div className="text-2xl font-bold text-white">{versions.length}</div>
-                <div className="text-[11px] text-slate-400 mt-1">
-                  Active: <span className="text-brand-300 truncate">{resume.title}</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Interactive Live State Verification Card */}
-            <div className="p-5 rounded-2xl bg-gradient-to-br from-slate-900 to-slate-850 border border-slate-800 shadow-lg">
-              <div className="flex items-center justify-between pb-3 mb-4 border-b border-slate-800">
-                <div className="flex items-center space-x-2">
-                  <Sparkles className="w-4 h-4 text-brand-400" />
-                  <h2 className="text-sm font-semibold text-white">
-                    Live Active State Test Bench (Checkpoint 05 Persistence)
-                  </h2>
-                </div>
-                <span className="text-xs font-mono px-2.5 py-0.5 rounded bg-brand-500/10 text-brand-300 border border-brand-500/30">
-                  Instant State Sync Across All Tabs
-                </span>
-              </div>
-
-              <p className="text-xs text-slate-300 mb-4 leading-relaxed">
-                Test state persistence by modifying the candidate fields below. Then switch between the{' '}
-                <strong className="text-white">Visual Editor</strong>,{' '}
-                <strong className="text-white">LaTeX Code</strong>, and{' '}
-                <strong className="text-white">Live Preview</strong> tabs. Notice how your edits persist
-                instantly without page reload or state loss!
-              </p>
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                <div>
-                  <label className="block text-[11px] font-medium text-slate-400 mb-1">
-                    Candidate Full Name:
-                  </label>
-                  <input
-                    type="text"
-                    value={resume.header.fullName}
-                    onChange={(e) => updateHeaderField('fullName', e.target.value)}
-                    className="w-full px-3 py-1.5 text-xs bg-slate-950 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 font-medium"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[11px] font-medium text-slate-400 mb-1">
-                    Headline / Title:
-                  </label>
-                  <input
-                    type="text"
-                    value={resume.header.headline || ''}
-                    onChange={(e) => updateHeaderField('headline', e.target.value)}
-                    className="w-full px-3 py-1.5 text-xs bg-slate-950 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[11px] font-medium text-slate-400 mb-1">
-                    Resume Document Title:
-                  </label>
-                  <input
-                    type="text"
-                    value={resume.title}
-                    onChange={(e) => updateResumeField('title', e.target.value)}
-                    className="w-full px-3 py-1.5 text-xs bg-slate-950 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 font-medium"
-                  />
-                </div>
-              </div>
-
-              <div className="mt-4 pt-3 border-t border-slate-800 flex flex-wrap items-center justify-between gap-2 text-xs">
-                <div className="flex items-center space-x-2 text-slate-400">
-                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>State is actively synced to memory and verified</span>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <button
-                    type="button"
-                    onClick={triggerAutosaveFeedback}
-                    className="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-md text-xs font-medium border border-slate-700 transition-colors flex items-center gap-1.5"
-                  >
-                    <Save className="w-3.5 h-3.5 text-brand-400" />
-                    Simulate Save Indicator
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {/* Workspace Modules Quick Launcher */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              {[
-                {
-                  id: 'editor' as WorkspaceTab,
-                  title: 'Visual Editor',
-                  desc: 'Edit sections, experience, bullets, and technical skills.',
-                  icon: <FileText className="w-5 h-5 text-brand-400" />
-                },
-                {
-                  id: 'latex' as WorkspaceTab,
-                  title: 'LaTeX Code Engine',
-                  desc: 'Overleaf-grade raw TeX source synchronized with resume.',
-                  icon: <Code2 className="w-5 h-5 text-indigo-400" />
-                },
-                {
-                  id: 'preview' as WorkspaceTab,
-                  title: 'Live Document Preview',
-                  desc: 'Pixel-perfect US Letter paper canvas with zoom & export.',
-                  icon: <Eye className="w-5 h-5 text-emerald-400" />
-                },
-                {
-                  id: 'jd-intelligence' as WorkspaceTab,
-                  title: 'JD Intelligence',
-                  desc: 'Match score matrix & keyword optimization against job targets.',
-                  icon: <Target className="w-5 h-5 text-rose-400" />
-                }
-              ].map((mod) => (
-                <div
-                  key={mod.id}
-                  onClick={() => setActiveTab(mod.id)}
-                  className="p-4 rounded-xl bg-slate-900 border border-slate-800 hover:border-brand-500/50 hover:bg-slate-850 cursor-pointer transition-all flex flex-col justify-between group"
-                >
-                  <div>
-                    <div className="p-2 w-fit rounded-lg bg-slate-800/80 mb-3 group-hover:scale-105 transition-transform">
-                      {mod.icon}
-                    </div>
-                    <h3 className="text-sm font-semibold text-white group-hover:text-brand-300 transition-colors">
-                      {mod.title}
-                    </h3>
-                    <p className="text-xs text-slate-400 mt-1 leading-normal">{mod.desc}</p>
-                  </div>
-                  <div className="mt-4 pt-2 border-t border-slate-800/60 flex items-center justify-between text-xs text-brand-400 font-medium">
-                    <span>Open Module</span>
-                    <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
+          <Dashboard
+            resume={resume}
+            setResume={setResume}
+            activeTab={activeTab}
+            setActiveTab={setActiveTab}
+            versions={versions}
+            restoreVersion={handleRestoreVersion}
+            onCreateVersion={handleCreateVersion}
+            unappliedDiffsCount={unappliedDiffsCount}
+            onUpdateHeaderField={updateHeaderField}
+            onUpdateResumeField={updateResumeField}
+            onSimulateAutosave={triggerAutosaveFeedback}
+          />
         )}
 
         {/* ========================================================= */}
