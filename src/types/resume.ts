@@ -82,10 +82,20 @@ export interface CustomSection {
   enabled: boolean;
 }
 
+export interface ResumeStyling {
+  fontFamily: 'sans' | 'serif' | 'mono';
+  fontSize: 'sm' | 'md' | 'lg';
+  margins: 'compact' | 'normal' | 'spacious';
+  primaryColor: string;
+  showIcons: boolean;
+}
+
+export type ResumeTemplateId = 'ats-minimal' | 'modern-engineering' | 'executive' | 'one-page-clean';
+
 export interface ResumeData {
   id: string;
   title: string;
-  templateId: 'ats-minimal' | 'modern-engineering' | 'executive' | 'one-page-clean';
+  templateId: ResumeTemplateId;
   header: HeaderData;
   summary: string;
   skills: SkillCategory[];
@@ -95,13 +105,7 @@ export interface ResumeData {
   certifications: CertificationItem[];
   customSections: CustomSection[];
   latexSource?: string;
-  styling: {
-    fontFamily: 'sans' | 'serif' | 'mono';
-    fontSize: 'sm' | 'md' | 'lg';
-    margins: 'compact' | 'normal' | 'spacious';
-    primaryColor: string;
-    showIcons: boolean;
-  };
+  styling: ResumeStyling;
   createdAt: string;
   updatedAt: string;
 }
@@ -142,6 +146,24 @@ export interface ScoreCategory {
   explanation: string;
 }
 
+export type ActionableFixPayload =
+  | { field: string; value: unknown }
+  | Record<string, unknown>
+  | string
+  | string[]
+  | number
+  | boolean;
+
+export interface ActionableSuggestion {
+  id: string;
+  section: string;
+  issue: string;
+  recommendation: string;
+  impact: 'high' | 'medium' | 'low';
+  autoFixAvailable?: boolean;
+  fixPayload?: ActionableFixPayload;
+}
+
 export interface ScoreBreakdown {
   overallScore: number;
   categories: {
@@ -157,15 +179,7 @@ export interface ScoreBreakdown {
   };
   missingSkills: string[];
   matchingSkills: string[];
-  actionableSuggestions: {
-    id: string;
-    section: string;
-    issue: string;
-    recommendation: string;
-    impact: 'high' | 'medium' | 'low';
-    autoFixAvailable?: boolean;
-    fixPayload?: any;
-  }[];
+  actionableSuggestions: ActionableSuggestion[];
 }
 
 export interface HealthCheckIssue {
@@ -196,12 +210,21 @@ export interface AIDiffPatch {
   applied: boolean;
 }
 
+export type ContentLibraryData =
+  | ExperienceItem
+  | ProjectItem
+  | EducationItem
+  | CertificationItem
+  | SkillCategory
+  | CustomSectionItem
+  | Record<string, unknown>;
+
 export interface ContentLibraryItem {
   id: string;
   userId: string;
   category: 'experience' | 'project' | 'education' | 'certification' | 'skill' | 'achievement';
   title: string;
-  data: any;
+  data: ContentLibraryData;
   tags: string[];
   createdAt: string;
 }
@@ -217,16 +240,18 @@ export interface JobApplicationHistory {
   notes?: string;
 }
 
+export interface ChatSuggestedAction {
+  label: string;
+  action: string;
+  payload?: Record<string, unknown> | string | number | boolean | null;
+}
+
 export interface ChatMessage {
   id: string;
   sender: 'user' | 'assistant';
   text: string;
   timestamp: string;
-  suggestedActions?: {
-    label: string;
-    action: string;
-    payload?: any;
-  }[];
+  suggestedActions?: ChatSuggestedAction[];
   diffPatch?: AIDiffPatch[];
 }
 
@@ -239,8 +264,6 @@ export type WorkspaceTab =
   | 'diff'
   | 'health-check'
   | 'content-library';
-
-export type ResumeTemplateId = 'ats-minimal' | 'modern-engineering' | 'executive' | 'one-page-clean';
 
 export interface UserProfile {
   id: string;
@@ -284,4 +307,3 @@ export interface SettingsUpdatePayload {
   exportPageLimit?: number;
   themePreference?: 'dark' | 'light' | 'system';
 }
-

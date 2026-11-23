@@ -1,5 +1,71 @@
-import { ResumeData, ResumeVersion } from '../types/resume';
+import {
+  ResumeData,
+  ResumeVersion,
+  ResumeStyling,
+  HeaderData
+} from '../types/resume';
 
+/**
+ * Creates default styling configuration for resume layout
+ */
+export const createDefaultStyling = (): ResumeStyling => ({
+  fontFamily: 'sans',
+  fontSize: 'md',
+  margins: 'normal',
+  primaryColor: '#0c8ee9',
+  showIcons: true
+});
+
+/**
+ * Performs a deep clone of any serializable object to guarantee immutability
+ */
+export const deepClone = <T>(obj: T): T => {
+  if (obj === null || typeof obj !== 'object') {
+    return obj;
+  }
+  return JSON.parse(JSON.stringify(obj));
+};
+
+/**
+ * Specialized deep clone for ResumeData ensuring strict typing and detached references
+ */
+export const deepCloneResume = (resume: ResumeData): ResumeData => {
+  return deepClone<ResumeData>(resume);
+};
+
+/**
+ * Factory for creating an empty resume with empty sections
+ */
+export const createEmptyResume = (id: string = `res-${Date.now()}`, title: string = 'Untitled Resume'): ResumeData => {
+  const timestamp = new Date().toISOString();
+  return {
+    id,
+    title,
+    templateId: 'ats-minimal',
+    header: {
+      fullName: '',
+      email: '',
+      phone: '',
+      location: '',
+      headline: '',
+      links: []
+    },
+    summary: '',
+    skills: [],
+    experience: [],
+    education: [],
+    projects: [],
+    certifications: [],
+    customSections: [],
+    styling: createDefaultStyling(),
+    createdAt: timestamp,
+    updatedAt: timestamp
+  };
+};
+
+/**
+ * Creates pre-populated professional sample resume (Alex Vance - Master Resume)
+ */
 export const createInitialResume = (): ResumeData => {
   return {
     id: 'res-default-1',
@@ -137,18 +203,15 @@ export const createInitialResume = (): ResumeData => {
         ]
       }
     ],
-    styling: {
-      fontFamily: 'sans',
-      fontSize: 'md',
-      margins: 'normal',
-      primaryColor: '#0c8ee9',
-      showIcons: true
-    },
+    styling: createDefaultStyling(),
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString()
   };
 };
 
+/**
+ * Creates multi-version snapshots for version manager demonstration
+ */
 export const createInitialVersions = (baseResume: ResumeData): ResumeVersion[] => {
   const version1: ResumeVersion = {
     id: 'ver-1',
@@ -156,12 +219,12 @@ export const createInitialVersions = (baseResume: ResumeData): ResumeVersion[] =
     versionName: 'Alex Vance - Master Resume',
     targetCompany: 'General / Master',
     targetRole: 'Senior Full Stack & AI Systems Engineer',
-    resumeData: JSON.parse(JSON.stringify(baseResume)),
+    resumeData: deepCloneResume(baseResume),
     score: 87,
     createdAt: '2026-10-01T10:00:00.000Z'
   };
 
-  const version2Data: ResumeData = JSON.parse(JSON.stringify(baseResume));
+  const version2Data: ResumeData = deepCloneResume(baseResume);
   version2Data.id = 'res-ver-2';
   version2Data.title = 'Staff AI Infrastructure Engineer (Google)';
   version2Data.header.headline = 'Staff AI Infrastructure & Cloud Systems Engineer';
@@ -177,7 +240,7 @@ export const createInitialVersions = (baseResume: ResumeData): ResumeVersion[] =
     createdAt: '2026-10-05T14:30:00.000Z'
   };
 
-  const version3Data: ResumeData = JSON.parse(JSON.stringify(baseResume));
+  const version3Data: ResumeData = deepCloneResume(baseResume);
   version3Data.id = 'res-ver-3';
   version3Data.title = 'Lead Frontend & Next.js Architect (Stripe)';
   version3Data.header.headline = 'Lead Frontend Architect & UI Systems Lead';

@@ -40,6 +40,7 @@ import {
   generateLatexFromResume
 } from './utils/defaultResume';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { ResumeProvider, useResume } from './context/ResumeContext';
 
 function WorkspaceContent() {
   const { isSupabaseConnected } = useAuth();
@@ -1043,7 +1044,9 @@ function WorkspaceContent() {
 export function App() {
   return (
     <AuthProvider>
-      <WorkspaceContent />
+      <ResumeProvider>
+        <WorkspaceContent />
+      </ResumeProvider>
     </AuthProvider>
   );
 }
