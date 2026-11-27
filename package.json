@@ -15,6 +15,7 @@
     "test:profile": "tsx server/test-checkpoint-10.ts",
     "test:dashboard": "tsx server/test-checkpoint-11.ts",
     "test:core": "tsx server/test-checkpoint-12.ts",
+    "test:creation": "tsx server/test-checkpoint-13.ts",
     "preview": "vite preview",
     "start": "tsx server/index.ts"
   },

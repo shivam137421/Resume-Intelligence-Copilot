@@ -307,3 +307,22 @@ export interface SettingsUpdatePayload {
   exportPageLimit?: number;
   themePreference?: 'dark' | 'light' | 'system';
 }
+
+export interface CreateResumeOptions {
+  title?: string;
+  templateId?: ResumeTemplateId;
+  fromScratch?: boolean;
+  sampleData?: boolean;
+  authorName?: string;
+  targetRole?: string;
+}
+
+export interface TemplateMetadata {
+  id: ResumeTemplateId;
+  name: string;
+  description: string;
+  badge: string;
+  recommendedFor: string;
+  styling: ResumeStyling;
+}
+

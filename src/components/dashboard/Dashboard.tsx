@@ -20,7 +20,8 @@ import {
   Clock,
   Briefcase,
   Sliders,
-  Check
+  Check,
+  Plus
 } from 'lucide-react';
 import {
   ResumeData,
@@ -30,10 +31,13 @@ import {
   ScoreBreakdown,
   HealthCheckResult,
   ContentLibraryItem,
-  HeaderData
+  HeaderData,
+  CreateResumeOptions
 } from '../../types/resume';
 import { useAuth } from '../../context/AuthContext';
 import { ProfileSettingsModal } from '../profile/ProfileSettingsModal';
+import { NewResumeModal } from '../resume/NewResumeModal';
+import { createNewResume as createNewResumeUtil } from '../../utils/defaultResume';
 
 export interface DashboardProps {
   resume?: ResumeData;
@@ -43,6 +47,7 @@ export interface DashboardProps {
   versions?: ResumeVersion[];
   restoreVersion?: (versionId: string) => void;
   onCreateVersion?: (versionName: string) => void;
+  onCreateResume?: (options: CreateResumeOptions) => void;
   scoreReport?: ScoreBreakdown | null;
   healthCheck?: HealthCheckResult | null;
   activeJd?: JobDescription | null;
@@ -154,6 +159,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
   versions = [],
   restoreVersion = () => {},
   onCreateVersion,
+  onCreateResume,
   scoreReport,
   healthCheck,
   activeJd,
@@ -165,8 +171,19 @@ export const Dashboard: React.FC<DashboardProps> = ({
 }) => {
   const { user, isSupabaseConnected } = useAuth();
   const [showProfileModal, setShowProfileModal] = useState<boolean>(false);
+  const [showCreateModal, setShowCreateModal] = useState<boolean>(false);
   const [copiedLink, setCopiedLink] = useState<boolean>(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleCreateResume = (options: CreateResumeOptions) => {
+    if (onCreateResume) {
+      onCreateResume(options);
+    } else if (setResume) {
+      const newResume = createNewResumeUtil(options);
+      setResume(newResume);
+      setActiveTab('editor');
+    }
+  };
 
   // Dynamic real-time KPI score calculation from active resume state
   const kpiMetrics = useMemo(() => {
@@ -247,6 +264,16 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
           {/* Quick Action Triggers */}
           <div className="flex flex-wrap items-center gap-2.5">
+            <button
+              type="button"
+              onClick={() => setShowCreateModal(true)}
+              className="flex items-center space-x-2 px-4 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold rounded-xl shadow-lg shadow-emerald-600/25 transition-all transform active:scale-95 cursor-pointer"
+              id="dashboard-create-resume"
+            >
+              <Plus className="w-4 h-4" />
+              <span>+ New Resume</span>
+            </button>
+
             <button
               type="button"
               onClick={() => setActiveTab('editor')}
@@ -802,6 +829,14 @@ export const Dashboard: React.FC<DashboardProps> = ({
           activeResumeTitle={resume?.title || 'Master Resume'}
         />
       )}
+
+      {/* Modal: Create New Resume */}
+      <NewResumeModal
+        isOpen={showCreateModal}
+        onClose={() => setShowCreateModal(false)}
+        onCreateResume={handleCreateResume}
+        defaultAuthorName={resume?.header?.fullName || user?.fullName}
+      />
 
     </div>
   );

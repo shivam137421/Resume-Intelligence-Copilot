@@ -33,11 +33,12 @@ import {
 } from 'lucide-react';
 import { Navbar } from './components/layout/Navbar';
 import { Dashboard } from './components/dashboard/Dashboard';
-import { WorkspaceTab, ResumeData, ResumeVersion } from './types/resume';
+import { WorkspaceTab, ResumeData, ResumeVersion, CreateResumeOptions } from './types/resume';
 import {
   createInitialResume,
   createInitialVersions,
-  generateLatexFromResume
+  generateLatexFromResume,
+  createNewResume as createNewResumeUtil
 } from './utils/defaultResume';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ResumeProvider, useResume } from './context/ResumeContext';
@@ -160,6 +161,14 @@ function WorkspaceContent() {
     }
   };
 
+  // Create new resume from scratch or professional template
+  const handleCreateResume = (options: CreateResumeOptions) => {
+    const newResume = createNewResumeUtil(options);
+    setResume(newResume);
+    setActiveTab('editor');
+    showToast(`Created new resume: "${newResume.title}"`);
+  };
+
   // Copy LaTeX source to clipboard
   const handleCopyLatex = () => {
     const latex = generateLatexFromResume(resume);
@@ -257,6 +266,7 @@ function WorkspaceContent() {
             versions={versions}
             restoreVersion={handleRestoreVersion}
             onCreateVersion={handleCreateVersion}
+            onCreateResume={handleCreateResume}
             unappliedDiffsCount={unappliedDiffsCount}
             onUpdateHeaderField={updateHeaderField}
             onUpdateResumeField={updateResumeField}

@@ -9,14 +9,20 @@ import {
   AIDiffPatch,
   ContentLibraryItem,
   JobApplicationHistory,
-  WorkspaceTab
+  WorkspaceTab,
+  ResumeTemplateId,
+  CreateResumeOptions,
+  TemplateMetadata
 } from '../types/resume';
 import {
   createInitialResume,
   createInitialVersions,
   deepCloneResume,
   deepClone,
-  generateLatexFromResume
+  generateLatexFromResume,
+  createNewResume as createNewResumeFactory,
+  switchResumeTemplate,
+  RESUME_TEMPLATES
 } from '../utils/defaultResume';
 import { apiClient } from '../services/apiClient';
 import { supabase, isSupabaseConfigured } from '../services/supabaseClient';
@@ -60,6 +66,11 @@ export interface ResumeContextType {
   canUndo: boolean;
   canRedo: boolean;
   resetToDefault: () => void;
+  createNewResume: (options?: CreateResumeOptions) => ResumeData;
+  initializeFromTemplate: (templateId: ResumeTemplateId, title?: string, useSampleData?: boolean) => ResumeData;
+  switchTemplate: (templateId: ResumeTemplateId) => void;
+  availableTemplates: TemplateMetadata[];
+  activeResumeId: string;
 }
 
 export const ResumeContext = createContext<ResumeContextType | undefined>(undefined);
@@ -411,6 +422,38 @@ export const ResumeProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     setResume(initial);
   }, [setResume]);
 
+  // Create new resume from scratch or professional template
+  const createNewResume = useCallback((options?: CreateResumeOptions): ResumeData => {
+    const newResume = createNewResumeFactory(options);
+    setResume(newResume);
+    return newResume;
+  }, [setResume]);
+
+  // Convenience helper for initializing from a specific template
+  const initializeFromTemplate = useCallback(
+    (templateId: ResumeTemplateId, title?: string, useSampleData: boolean = true): ResumeData => {
+      return createNewResume({
+        templateId,
+        title,
+        sampleData: useSampleData,
+        fromScratch: !useSampleData
+      });
+    },
+    [createNewResume]
+  );
+
+  // Switch template layout and styling on existing resume
+  const switchTemplate = useCallback(
+    (templateId: ResumeTemplateId) => {
+      setResumeState(prev => {
+        const updated = switchResumeTemplate(prev, templateId);
+        setResume(updated);
+        return updated;
+      });
+    },
+    [setResume]
+  );
+
   // Sync active JD to safe storage when changed
   useEffect(() => {
     if (activeJd) {
@@ -458,7 +501,12 @@ export const ResumeProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         redo,
         canUndo: historyPointer > 0,
         canRedo: historyPointer < history.length - 1,
-        resetToDefault
+        resetToDefault,
+        createNewResume,
+        initializeFromTemplate,
+        switchTemplate,
+        availableTemplates: RESUME_TEMPLATES,
+        activeResumeId: resume.id
       }}
     >
       {children}
